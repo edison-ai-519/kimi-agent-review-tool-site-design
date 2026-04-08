@@ -15,28 +15,27 @@ import { useIsMobile } from '@/hooks/useMediaQuery';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  User, 
+import {
+  User,
   Lock,
   Eye,
   EyeOff,
   ArrowRight,
   Sparkles,
   Network,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 import type { UserRole, ReviewStage, ProjectInfo, ReviewItem, SystemStatus } from '@/types';
 import './App.css';
 
-// Mock data
 const mockProject: ProjectInfo = {
   id: '1',
   name: '基于深度学习的智能医疗影像诊断系统',
   applicant: '清华大学计算机科学与技术系',
   budget: '500万元',
   duration: '2024.01 - 2026.12',
-  field: '人工智能/医疗健康',
-  stage: 'proposal'
+  field: '人工智能 / 医疗健康',
+  stage: 'proposal',
 };
 
 const mockSystemStatus: SystemStatus = {
@@ -44,12 +43,11 @@ const mockSystemStatus: SystemStatus = {
   lastUpdate: new Date(),
   ontologyVersion: '3.5.2',
   confidence: 0.87,
-  isOnline: true
+  isOnline: true,
 };
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
 
-// Login Page Component
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -57,8 +55,8 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const isMobile = useIsMobile();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
@@ -68,11 +66,10 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      {/* Animated Background */}
       <div className="absolute inset-0">
-        {[...Array(20)].map((_, i) => (
+        {[...Array(20)].map((_, index) => (
           <motion.div
-            key={i}
+            key={index}
             className="absolute w-1 h-1 bg-blue-400/30 rounded-full"
             style={{
               left: `${Math.random() * 100}%`,
@@ -89,7 +86,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             }}
           />
         ))}
-        
+
         <motion.div
           className="absolute w-[600px] h-[600px] rounded-full bg-blue-500/10 blur-3xl"
           style={{ top: '-200px', left: '-200px' }}
@@ -110,10 +107,8 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
         />
       </div>
 
-      {/* Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
         <div className={`w-full ${isMobile ? 'max-w-sm' : 'max-w-md'}`}>
-          {/* Logo */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -145,7 +140,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             </motion.p>
           </motion.div>
 
-          {/* Login Card */}
           <motion.div
             initial={{ opacity: 0, rotateX: 90 }}
             animate={{ opacity: 1, rotateX: 0 }}
@@ -163,13 +157,13 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-300" />
                       <Input
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(event) => setUsername(event.target.value)}
                         placeholder="请输入用户名"
                         className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-blue-300/50 h-11"
                       />
                     </div>
                   </div>
-                  
+
                   <div>
                     <label className="text-sm text-blue-200 mb-1.5 block">密码</label>
                     <div className="relative">
@@ -177,7 +171,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
                       <Input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(event) => setPassword(event.target.value)}
                         placeholder="请输入密码"
                         className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-blue-300/50 h-11"
                       />
@@ -227,7 +221,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             </Card>
           </motion.div>
 
-          {/* Features */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -259,7 +252,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-// Desktop Dashboard Component
 function DesktopDashboard() {
   const [userRole, setUserRole] = useState<UserRole>('expert');
   const [currentStage, setCurrentStage] = useState<ReviewStage>('proposal');
@@ -274,7 +266,6 @@ function DesktopDashboard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Top Navigation */}
       <TopNavigation
         userRole={userRole}
         currentStage={currentStage}
@@ -284,20 +275,17 @@ function DesktopDashboard() {
         onStageChange={setCurrentStage}
       />
 
-      {/* Main Content */}
       <div className="flex-1 flex pt-16 pb-8 overflow-hidden">
-        {/* Left: Ontology Panel */}
         <AnimatePresence mode="wait">
           {!isOntologyPanelCollapsed && (
-            <OntologyPanel 
+            <OntologyPanel
               highlightedPath={highlightedOntologyPath}
               isCollapsed={isOntologyPanelCollapsed}
               onToggleCollapse={() => setIsOntologyPanelCollapsed(!isOntologyPanelCollapsed)}
             />
           )}
         </AnimatePresence>
-        
-        {/* Collapsed toggle button */}
+
         {isOntologyPanelCollapsed && (
           <motion.button
             initial={{ opacity: 0, x: -20 }}
@@ -309,33 +297,21 @@ function DesktopDashboard() {
           </motion.button>
         )}
 
-        {/* Center: Review Workspace */}
         <div className="flex-1 overflow-hidden px-4 py-4">
-          <ReviewWorkspace 
-            project={mockProject}
-            onShowReasoning={handleShowReasoning}
-          />
+          <ReviewWorkspace project={mockProject} onShowReasoning={handleShowReasoning} />
         </div>
 
-        {/* Right: Reasoning Panel */}
         <AnimatePresence mode="wait">
-          <ReasoningPanel 
-            reviewItem={selectedReviewItem}
-            onClose={() => setSelectedReviewItem(null)}
-          />
+          <ReasoningPanel reviewItem={selectedReviewItem} onClose={() => setSelectedReviewItem(null)} />
         </AnimatePresence>
       </div>
 
-      {/* Bottom Status Bar */}
       <BottomStatusBar status={mockSystemStatus} />
-
-      {/* Floating Chat */}
       <FloatingChat />
     </div>
   );
 }
 
-// Mobile Dashboard Component
 function MobileDashboard() {
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
   const [selectedReviewItem, setSelectedReviewItem] = useState<ReviewItem | null>(null);
@@ -348,10 +324,9 @@ function MobileDashboard() {
     setIsReasoningModalOpen(true);
   };
 
-  // Handle tab changes
   const handleTabChange = (tab: MobileTab) => {
     setActiveTab(tab);
-    
+
     switch (tab) {
       case 'ontology':
         setIsOntologyDrawerOpen(true);
@@ -369,16 +344,13 @@ function MobileDashboard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Mobile Header */}
       <header className="sticky top-0 z-40 glass-strong border-b border-border/50">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
               <Network className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-sm truncate max-w-[150px]">
-              {mockProject.name}
-            </span>
+            <span className="font-semibold text-sm truncate max-w-[150px]">{mockProject.name}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -387,47 +359,36 @@ function MobileDashboard() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto p-4">
         {activeTab === 'home' && (
-          <MobileHomeView 
+          <MobileHomeView
             onViewReview={() => setActiveTab('review')}
             onViewOntology={() => setIsOntologyDrawerOpen(true)}
           />
         )}
-        
+
         {activeTab === 'review' && (
           <div className="pb-20">
             <div className="flex items-center gap-2 mb-4">
-              <button 
-                onClick={() => setActiveTab('home')}
-                className="p-2 -ml-2 rounded-lg hover:bg-muted/50"
-              >
+              <button onClick={() => setActiveTab('home')} className="p-2 -ml-2 rounded-lg hover:bg-muted/50">
                 <ArrowRight className="w-5 h-5 rotate-180" />
               </button>
               <h2 className="font-semibold text-lg">评审工作区</h2>
             </div>
-            <ReviewWorkspace 
-              project={mockProject}
-              onShowReasoning={handleShowReasoning}
-            />
+            <ReviewWorkspace project={mockProject} onShowReasoning={handleShowReasoning} />
           </div>
         )}
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav 
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        hasReasoning={!!selectedReviewItem}
-      />
+      <MobileBottomNav activeTab={activeTab} onTabChange={handleTabChange} hasReasoning={!!selectedReviewItem} />
 
-      {/* Mobile Modals/Drawers */}
-      <MobileOntologyDrawer 
+      <MobileOntologyDrawer
         isOpen={isOntologyDrawerOpen}
         onClose={() => {
           setIsOntologyDrawerOpen(false);
-          if (activeTab === 'ontology') setActiveTab('home');
+          if (activeTab === 'ontology') {
+            setActiveTab('home');
+          }
         }}
       />
 
@@ -441,14 +402,15 @@ function MobileDashboard() {
         isOpen={isChatModalOpen}
         onClose={() => {
           setIsChatModalOpen(false);
-          if (activeTab === 'chat') setActiveTab('home');
+          if (activeTab === 'chat') {
+            setActiveTab('home');
+          }
         }}
       />
     </div>
   );
 }
 
-// Main App Component
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const isMobile = useIsMobile();
@@ -456,20 +418,11 @@ function App() {
   return (
     <AnimatePresence mode="wait">
       {!isLoggedIn ? (
-        <motion.div
-          key="login"
-          exit={{ opacity: 0, scale: 1.1 }}
-          transition={{ duration: 0.5 }}
-        >
+        <motion.div key="login" exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.5 }}>
           <LoginPage onLogin={() => setIsLoggedIn(true)} />
         </motion.div>
       ) : (
-        <motion.div
-          key="dashboard"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        >
+        <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
           {isMobile ? <MobileDashboard /> : <DesktopDashboard />}
         </motion.div>
       )}

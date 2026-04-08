@@ -1,15 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Lightbulb, 
-  FileText, 
-  GitBranch, 
-  ChevronRight,
-  Quote,
-  Target,
-  CheckCircle2,
-  X
-} from 'lucide-react';
+import { Lightbulb, FileText, GitBranch, ChevronRight, Quote, Target, CheckCircle2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,48 +8,51 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReasoningChain, ReviewItem } from '@/types';
 
-// Mock reasoning chain data
 const mockReasoningChain: ReasoningChain = {
   nodes: [
-    { id: 'input', label: '项目：使用未成熟技术', type: 'input', confidence: 1 },
-    { id: 'ontology', label: '风险本体:技术成熟度低', type: 'ontology', confidence: 0.85 },
-    { id: 'rule', label: '关联规则:可行性扣分', type: 'rule', confidence: 0.8 },
-    { id: 'conclusion', label: '评审结论:建议谨慎', type: 'conclusion', confidence: 0.72 }
+    { id: 'input', label: '新型 Transformer 方案', type: 'input', confidence: 1 },
+    { id: 'ontology', label: '技术成熟度偏低', type: 'ontology', confidence: 0.85 },
+    { id: 'rule', label: '可行性扣分', type: 'rule', confidence: 0.8 },
+    { id: 'conclusion', label: '建议谨慎推进', type: 'conclusion', confidence: 0.72 },
   ],
   edges: [
-    { from: 'input', to: 'ontology', label: '属于', strength: 0.9 },
+    { from: 'input', to: 'ontology', label: '映射到', strength: 0.9 },
     { from: 'ontology', to: 'rule', label: '触发', strength: 0.85 },
-    { from: 'rule', to: 'conclusion', label: '得出', strength: 0.8 }
+    { from: 'rule', to: 'conclusion', label: '推导出', strength: 0.8 },
   ],
-  conclusion: '该项目在技术成熟度方面存在较高风险，建议要求申报方提供技术验证方案或替代技术路线。',
+  conclusion:
+    '该项目在技术成熟度方面存在较高风险，建议要求申报方补充技术验证方案，并给出可替代技术路线，以降低后续实施不确定性。',
   documents: [
     {
       id: '1',
-      source: '项目申报书 - 技术方案部分',
-      content: '本项目拟采用最新的Transformer架构进行医疗影像分析，该架构在公开数据集上取得了SOTA性能。',
-      highlights: ['Transformer架构', 'SOTA性能'],
-      relevance: 0.92
+      source: '项目申报书 - 技术方案章节',
+      content: '项目计划采用较新的 Transformer 架构进行医疗影像分析，前期实验在公开数据集上取得领先结果。',
+      highlights: ['Transformer', '公开数据集', '领先结果'],
+      relevance: 0.92,
     },
     {
       id: '2',
       source: '对比文献 - Nature Medicine 2023',
-      content: '研究表明，在医疗影像领域，传统CNN架构在数据量有限时表现更稳定，Transformer需要大量标注数据。',
-      highlights: ['CNN架构', '数据量有限', 'Transformer'],
-      relevance: 0.88
+      content: '相关研究指出，在医疗影像任务中，CNN 在中小规模数据场景下通常更稳定，而 Transformer 往往需要更大规模的标注数据支持。',
+      highlights: ['CNN', 'Transformer', '标注数据'],
+      relevance: 0.88,
     },
     {
       id: '3',
       source: '历史评审记录 - 2023-AI-015',
-      content: '类似项目因技术路线过于前沿，在实际部署中遇到兼容性问题，导致项目延期6个月。',
-      highlights: ['技术路线过于前沿', '兼容性问题'],
-      relevance: 0.75
-    }
-  ]
+      content: '类似项目曾因技术路线过于前沿，在部署阶段出现兼容性和算力成本问题，项目整体延期 6 个月。',
+      highlights: ['技术路线过于前沿', '兼容性', '延期 6 个月'],
+      relevance: 0.75,
+    },
+  ],
 };
 
-// Reasoning Graph Component
-function ReasoningGraph({ chain, highlightedNode, onNodeHover }: { 
-  chain: ReasoningChain; 
+function ReasoningGraph({
+  chain,
+  highlightedNode,
+  onNodeHover,
+}: {
+  chain: ReasoningChain;
   highlightedNode: string | null;
   onNodeHover: (nodeId: string | null) => void;
 }) {
@@ -80,31 +74,36 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
 
   const getNodeColor = (type: string) => {
     switch (type) {
-      case 'input': return '#3b82f6';
-      case 'ontology': return '#f97316';
-      case 'rule': return '#8b5cf6';
-      case 'conclusion': return '#22c55e';
-      default: return '#6b7280';
+      case 'input':
+        return '#3b82f6';
+      case 'ontology':
+        return '#f97316';
+      case 'rule':
+        return '#8b5cf6';
+      case 'conclusion':
+        return '#22c55e';
+      default:
+        return '#6b7280';
     }
   };
 
   const getNodeIcon = (type: string) => {
     switch (type) {
-      case 'input': return <FileText className="w-4 h-4" />;
-      case 'ontology': return <Target className="w-4 h-4" />;
-      case 'rule': return <GitBranch className="w-4 h-4" />;
-      case 'conclusion': return <Lightbulb className="w-4 h-4" />;
-      default: return null;
+      case 'input':
+        return <FileText className="w-4 h-4" />;
+      case 'ontology':
+        return <Target className="w-4 h-4" />;
+      case 'rule':
+        return <GitBranch className="w-4 h-4" />;
+      case 'conclusion':
+        return <Lightbulb className="w-4 h-4" />;
+      default:
+        return null;
     }
   };
 
   return (
-    <svg
-      ref={svgRef}
-      className="w-full h-[200px]"
-      viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-    >
-      {/* Gradient definitions */}
+    <svg ref={svgRef} className="w-full h-[200px]" viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}>
       <defs>
         <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#3b82f6" />
@@ -120,11 +119,12 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
         </filter>
       </defs>
 
-      {/* Edges */}
       {chain.edges.map((edge, index) => {
-        const fromNode = nodePositions.find(n => n.id === edge.from);
-        const toNode = nodePositions.find(n => n.id === edge.to);
-        if (!fromNode || !toNode) return null;
+        const fromNode = nodePositions.find((node) => node.id === edge.from);
+        const toNode = nodePositions.find((node) => node.id === edge.to);
+        if (!fromNode || !toNode) {
+          return null;
+        }
 
         return (
           <g key={`edge-${index}`}>
@@ -140,12 +140,10 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
               animate={{ pathLength: 1, opacity: 0.6 }}
               transition={{ duration: 1, delay: index * 0.2 }}
             />
-            {/* Arrowhead */}
             <polygon
               points={`${toNode.x - 8},${toNode.y} ${toNode.x - 15},${toNode.y - 4} ${toNode.x - 15},${toNode.y + 4}`}
               fill={getNodeColor(toNode.type)}
             />
-            {/* Edge label */}
             <text
               x={(fromNode.x + toNode.x) / 2}
               y={(fromNode.y + toNode.y) / 2 - 8}
@@ -158,7 +156,6 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
         );
       })}
 
-      {/* Nodes */}
       {nodePositions.map((node, index) => (
         <g
           key={node.id}
@@ -171,36 +168,24 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
             r={24}
             fill={getNodeColor(node.type)}
             initial={{ scale: 0, opacity: 0 }}
-            animate={{ 
-              scale: highlightedNode === node.id ? 1.2 : 1, 
-              opacity: 1 
+            animate={{
+              scale: highlightedNode === node.id ? 1.2 : 1,
+              opacity: 1,
             }}
-            transition={{ 
+            transition={{
               scale: { duration: 0.2 },
-              opacity: { duration: 0.5, delay: index * 0.15 }
+              opacity: { duration: 0.5, delay: index * 0.15 },
             }}
             filter={highlightedNode === node.id ? 'url(#glow)' : undefined}
             className="transition-all duration-200"
           />
           <foreignObject x="-12" y="-12" width="24" height="24">
-            <div className="flex items-center justify-center w-full h-full text-white">
-              {getNodeIcon(node.type)}
-            </div>
+            <div className="flex items-center justify-center w-full h-full text-white">{getNodeIcon(node.type)}</div>
           </foreignObject>
-          {/* Node label */}
-          <text
-            y={38}
-            textAnchor="middle"
-            className="text-[10px] fill-foreground font-medium"
-          >
+          <text y={38} textAnchor="middle" className="text-[10px] fill-foreground font-medium">
             {node.label}
           </text>
-          {/* Confidence badge */}
-          <text
-            y={50}
-            textAnchor="middle"
-            className="text-[9px] fill-muted-foreground"
-          >
+          <text y={50} textAnchor="middle" className="text-[9px] fill-muted-foreground">
             {(node.confidence * 100).toFixed(0)}%
           </text>
         </g>
@@ -209,22 +194,18 @@ function ReasoningGraph({ chain, highlightedNode, onNodeHover }: {
   );
 }
 
-// Document Fragment Component
 function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][0] }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Highlight keywords in content
   const renderHighlightedContent = () => {
     let content = fragment.content;
-    fragment.highlights.forEach(highlight => {
+    fragment.highlights.forEach((highlight) => {
       const regex = new RegExp(`(${highlight})`, 'gi');
       content = content.replace(regex, '|||$1|||');
     });
-    
+
     return content.split('|||').map((part, index) => {
-      const isHighlight = fragment.highlights.some(h => 
-        part.toLowerCase() === h.toLowerCase()
-      );
+      const isHighlight = fragment.highlights.some((highlight) => part.toLowerCase() === highlight.toLowerCase());
       return isHighlight ? (
         <mark key={index} className="bg-amber-200 dark:bg-amber-900/50 px-0.5 rounded">
           {part}
@@ -241,10 +222,7 @@ function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][
       animate={{ opacity: 1, y: 0 }}
       className="rounded-lg border border-border/50 overflow-hidden"
     >
-      <div 
-        className="p-3 bg-muted/30 cursor-pointer flex items-center justify-between"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
+      <div className="p-3 bg-muted/30 cursor-pointer flex items-center justify-between" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-blue-500" />
           <span className="text-sm font-medium truncate max-w-[180px]">{fragment.source}</span>
@@ -253,22 +231,14 @@ function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][
           <Badge variant="secondary" className="text-xs">
             {(fragment.relevance * 100).toFixed(0)}% 相关
           </Badge>
-          <motion.div
-            animate={{ rotate: isExpanded ? 90 : 0 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </motion.div>
         </div>
       </div>
-      
+
       {isExpanded && (
-        <motion.div
-          initial={{ height: 0 }}
-          animate={{ height: 'auto' }}
-          exit={{ height: 0 }}
-          className="p-3 border-t border-border/50"
-        >
+        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="p-3 border-t border-border/50">
           <p className="text-sm text-muted-foreground leading-relaxed">
             <Quote className="w-4 h-4 inline-block mr-1 text-muted-foreground/50" />
             {renderHighlightedContent()}
@@ -308,7 +278,7 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
             </Button>
           )}
         </div>
-        
+
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
@@ -329,7 +299,6 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className="h-full glass border-l border-border/50 flex flex-col w-[380px]"
     >
-      {/* Header */}
       <div className="p-4 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Lightbulb className="w-5 h-5 text-blue-500" />
@@ -344,7 +313,6 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-          {/* Current Item Info */}
           <Card>
             <CardContent className="p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -364,7 +332,6 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
             </CardContent>
           </Card>
 
-          {/* Conclusion Summary */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -373,13 +340,10 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {chain.conclusion}
-              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{chain.conclusion}</p>
             </CardContent>
           </Card>
 
-          {/* Reasoning Chain Visualization */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -388,13 +352,8 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ReasoningGraph 
-                chain={chain} 
-                highlightedNode={highlightedNode}
-                onNodeHover={setHighlightedNode}
-              />
-              
-              {/* Legend */}
+              <ReasoningGraph chain={chain} highlightedNode={highlightedNode} onNodeHover={setHighlightedNode} />
+
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 <div className="flex items-center gap-1">
                   <div className="w-3 h-3 rounded-full bg-blue-500" />
@@ -416,7 +375,6 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
             </CardContent>
           </Card>
 
-          {/* Document Fragments */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -425,13 +383,12 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {chain.documents.map((doc) => (
-                <DocumentFragment key={doc.id} fragment={doc} />
+              {chain.documents.map((document) => (
+                <DocumentFragment key={document.id} fragment={document} />
               ))}
             </CardContent>
           </Card>
 
-          {/* Ontology Path Highlight */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -443,11 +400,11 @@ export function ReasoningPanel({ reviewItem, onClose }: ReasoningPanelProps) {
               <div className="flex items-center gap-2 flex-wrap">
                 {['风险本体', '技术成熟度', '可行性评估'].map((path, index) => (
                   <div key={path} className="flex items-center gap-2">
-                    <Badge 
-                      variant="secondary" 
+                    <Badge
+                      variant="secondary"
                       className={cn(
                         'text-xs cursor-pointer hover:bg-blue-500/20 transition-colors',
-                        index === 1 && 'bg-blue-500/20 ring-1 ring-blue-500'
+                        index === 1 && 'bg-blue-500/20 ring-1 ring-blue-500',
                       )}
                     >
                       {path}

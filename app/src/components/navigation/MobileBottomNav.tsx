@@ -1,11 +1,5 @@
 import { motion } from 'framer-motion';
-import { 
-  Network, 
-  ClipboardList, 
-  Lightbulb, 
-  MessageSquare,
-  Home
-} from 'lucide-react';
+import { Network, ClipboardList, Lightbulb, MessageSquare, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
@@ -35,7 +29,7 @@ export function MobileBottomNav({ activeTab, onTabChange, hasReasoning }: Mobile
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const isDisabled = tab.id === 'reasoning' && !hasReasoning;
-          
+
           return (
             <button
               key={tab.id}
@@ -45,20 +39,12 @@ export function MobileBottomNav({ activeTab, onTabChange, hasReasoning }: Mobile
                 'flex flex-col items-center justify-center flex-1 h-full gap-1',
                 'transition-colors duration-200',
                 isActive ? 'text-blue-500' : 'text-muted-foreground',
-                isDisabled && 'opacity-40 cursor-not-allowed'
+                isDisabled && 'opacity-40 cursor-not-allowed',
               )}
             >
-              <div className={cn(
-                'relative p-1.5 rounded-xl transition-all duration-200',
-                isActive && 'bg-blue-500/10'
-              )}>
-                <tab.icon className={cn(
-                  'w-5 h-5 transition-transform duration-200',
-                  isActive && 'scale-110'
-                )} />
-                {tab.id === 'chat' && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full" />
-                )}
+              <div className={cn('relative p-1.5 rounded-xl transition-all duration-200', isActive && 'bg-blue-500/10')}>
+                <tab.icon className={cn('w-5 h-5 transition-transform duration-200', isActive && 'scale-110')} />
+                {tab.id === 'chat' && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full" />}
               </div>
               <span className="text-[10px] font-medium">{tab.label}</span>
             </button>
