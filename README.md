@@ -269,6 +269,24 @@ LLM_PROVIDER=http-template
 - `app/server/docs/integration-contracts.md`
   真实服务接入协议
 
+## Update Log
+
+### 2026-04-09
+
+- Commit: `fc5388a`
+- Summary: 将项目从纯前端演示原型推进为“前端 + 最小后端联调版”，并完成一轮接口、文档和工程收口
+
+本次更新主要包括：
+
+- 新增最小后端服务，提供登录、应用状态、知识库检索、推理依据、评审保存、聊天和通用 AI 接口
+- 新增假知识库 JSON、评审种子数据、推理映射数据，支撑当前联调和演示
+- 抽离 Knowledge Base Provider / LLM Provider，可在 `mock` 与 `http-template` 之间切换
+- 为后续接入真实知识库和真实模型补齐接口契约文档
+- 前端改为通过统一 API 和 `useReviewApp` hook 读取后端数据，不再依赖本地 `setTimeout` mock
+- 聊天和“生成辅助意见”统一走预留 AI 接口，并能附带当前评审项上下文
+- 增加后端参数校验，补齐知识库返回类型，修复项目自身的 ESLint 问题
+- 整理 `.gitignore`、README 和运行说明，便于后续继续开发和交接
+
 ## Current Limitations
 
 当前版本仍有这些限制：
