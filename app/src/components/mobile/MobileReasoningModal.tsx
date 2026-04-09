@@ -1,50 +1,11 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lightbulb, FileText, GitBranch, Quote, Target, CheckCircle2, ChevronRight } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
-import type { ReasoningChain, ReviewItem } from '@/types';
-
-const mockReasoningChain: ReasoningChain = {
-  nodes: [
-    { id: 'input', label: '新型 Transformer 方案', type: 'input', confidence: 1 },
-    { id: 'ontology', label: '技术成熟度偏低', type: 'ontology', confidence: 0.85 },
-    { id: 'rule', label: '可行性扣分', type: 'rule', confidence: 0.8 },
-    { id: 'conclusion', label: '建议谨慎推进', type: 'conclusion', confidence: 0.72 },
-  ],
-  edges: [
-    { from: 'input', to: 'ontology', label: '映射到', strength: 0.9 },
-    { from: 'ontology', to: 'rule', label: '触发', strength: 0.85 },
-    { from: 'rule', to: 'conclusion', label: '推导出', strength: 0.8 },
-  ],
-  conclusion:
-    '该项目在技术成熟度方面存在较高风险，建议要求申报方补充技术验证方案，并给出可替代技术路线，以降低后续实施不确定性。',
-  documents: [
-    {
-      id: '1',
-      source: '项目申报书 - 技术方案章节',
-      content: '项目计划采用较新的 Transformer 架构进行医疗影像分析，前期实验在公开数据集上取得领先结果。',
-      highlights: ['Transformer', '公开数据集', '领先结果'],
-      relevance: 0.92,
-    },
-    {
-      id: '2',
-      source: '对比文献 - Nature Medicine 2023',
-      content: '相关研究指出，在医疗影像任务中，CNN 在中小规模数据场景下通常更稳定，而 Transformer 往往需要更大规模的标注数据支持。',
-      highlights: ['CNN', 'Transformer', '标注数据'],
-      relevance: 0.88,
-    },
-    {
-      id: '3',
-      source: '历史评审记录 - 2023-AI-015',
-      content: '类似项目曾因技术路线过于前沿，在部署阶段出现兼容性和算力成本问题，项目整体延期 6 个月。',
-      highlights: ['技术路线过于前沿', '兼容性', '延期 6 个月'],
-      relevance: 0.75,
-    },
-  ],
-};
+import { CheckCircle2, ChevronRight, FileText, GitBranch, Lightbulb, Quote, Target, X } from 'lucide-react';
+import type { ReasoningChain, ReasoningData, ReviewItem } from '@/types';
 
 function MobileReasoningFlow({ chain }: { chain: ReasoningChain }) {
   return (
@@ -55,37 +16,37 @@ function MobileReasoningFlow({ chain }: { chain: ReasoningChain }) {
             input: 'bg-blue-500',
             ontology: 'bg-orange-500',
             rule: 'bg-purple-500',
-            conclusion: 'bg-green-500',
-          };
+            conclusion: 'bg-green-500'
+          } satisfies Record<ReasoningChain['nodes'][number]['type'], string>;
 
-          const icons = {
-            input: <FileText className="w-4 h-4" />,
-            ontology: <Target className="w-4 h-4" />,
-            rule: <GitBranch className="w-4 h-4" />,
-            conclusion: <Lightbulb className="w-4 h-4" />,
-          };
+          const labels = {
+            input: '输入',
+            ontology: '本体',
+            rule: '规则',
+            conclusion: '结论'
+          } satisfies Record<ReasoningChain['nodes'][number]['type'], string>;
 
           return (
             <motion.div
               key={node.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.15 }}
+              transition={{ delay: index * 0.12 }}
               className="relative"
             >
               {index < chain.nodes.length - 1 && (
-                <div className="absolute left-5 top-10 w-0.5 h-6 bg-gradient-to-b from-muted-foreground/30 to-muted-foreground/10" />
+                <div className="absolute left-5 top-10 h-6 w-0.5 bg-gradient-to-b from-muted-foreground/30 to-muted-foreground/10" />
               )}
 
               <div className="flex items-start gap-3">
-                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', colors[node.type])}>
-                  {icons[node.type]}
+                <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white', colors[node.type])}>
+                  {labels[node.type]}
                 </div>
                 <div className="flex-1 pt-1">
-                  <div className="font-medium text-sm">{node.label}</div>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="text-sm font-medium">{node.label}</div>
+                  <div className="mt-1 flex items-center gap-2">
                     <Badge variant="secondary" className="text-[10px]">
-                      置信度 {(node.confidence * 100).toFixed(0)}%
+                      置信度 {Math.round(node.confidence * 100)}%
                     </Badge>
                     {index < chain.nodes.length - 1 && chain.edges[index] && (
                       <span className="text-[10px] text-muted-foreground">→ {chain.edges[index].label}</span>
@@ -101,20 +62,20 @@ function MobileReasoningFlow({ chain }: { chain: ReasoningChain }) {
   );
 }
 
-function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][0] }) {
+function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][number] }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const renderHighlightedContent = () => {
     let content = fragment.content;
-    fragment.highlights.forEach((highlight) => {
+    for (const highlight of fragment.highlights) {
       const regex = new RegExp(`(${highlight})`, 'gi');
       content = content.replace(regex, '|||$1|||');
-    });
+    }
 
     return content.split('|||').map((part, index) => {
-      const isHighlight = fragment.highlights.some((highlight) => part.toLowerCase() === highlight.toLowerCase());
+      const isHighlight = fragment.highlights.some((highlight) => highlight.toLowerCase() === part.toLowerCase());
       return isHighlight ? (
-        <mark key={index} className="bg-amber-200 dark:bg-amber-900/50 px-0.5 rounded">
+        <mark key={index} className="rounded bg-amber-200 px-0.5 dark:bg-amber-900/50">
           {part}
         </mark>
       ) : (
@@ -127,19 +88,19 @@ function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-border/50 overflow-hidden"
+      className="overflow-hidden rounded-xl border border-border/50"
     >
-      <div className="p-3 bg-muted/30 cursor-pointer flex items-center justify-between" onClick={() => setIsExpanded(!isExpanded)}>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
-          <span className="text-sm font-medium truncate">{fragment.source}</span>
+      <div className="flex cursor-pointer items-center justify-between bg-muted/30 p-3" onClick={() => setIsExpanded((current) => !current)}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <FileText className="h-4 w-4 flex-shrink-0 text-blue-500" />
+          <span className="truncate text-sm font-medium">{fragment.source}</span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <Badge variant="secondary" className="text-[10px]">
-            {(fragment.relevance * 100).toFixed(0)}%
+            {Math.round(fragment.relevance * 100)}%
           </Badge>
           <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </motion.div>
         </div>
       </div>
@@ -148,8 +109,8 @@ function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][
         {isExpanded && (
           <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-border/50">
             <div className="p-3">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                <Quote className="w-3 h-3 inline-block mr-1 text-muted-foreground/50" />
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                <Quote className="mr-1 inline-block h-3 w-3 text-muted-foreground/50" />
                 {renderHighlightedContent()}
               </p>
             </div>
@@ -164,11 +125,18 @@ interface MobileReasoningModalProps {
   isOpen: boolean;
   onClose: () => void;
   reviewItem: ReviewItem | null;
+  reasoning: ReasoningData | null;
+  isLoading?: boolean;
 }
 
-export function MobileReasoningModal({ isOpen, onClose, reviewItem }: MobileReasoningModalProps) {
+export function MobileReasoningModal({
+  isOpen,
+  onClose,
+  reviewItem,
+  reasoning,
+  isLoading = false
+}: MobileReasoningModalProps) {
   const [activeTab, setActiveTab] = useState<'flow' | 'docs' | 'path'>('flow');
-  const chain = mockReasoningChain;
 
   if (!reviewItem) {
     return null;
@@ -177,31 +145,26 @@ export function MobileReasoningModal({ isOpen, onClose, reviewItem }: MobileReas
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-background"
-        >
-          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-background">
+          <div className="sticky top-0 z-10 border-b border-border/50 bg-background/95 backdrop-blur-sm">
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
-                <Lightbulb className="w-5 h-5 text-blue-500" />
+                <Lightbulb className="h-5 w-5 text-blue-500" />
                 <span className="font-semibold">推理依据</span>
               </div>
-              <button onClick={onClose} className="p-2 rounded-full hover:bg-muted/50">
-                <X className="w-5 h-5" />
+              <button onClick={onClose} className="rounded-full p-2 hover:bg-muted/50">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="px-4 pb-3">
               <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-blue-500" />
+                <Target className="h-4 w-4 text-blue-500" />
                 <span className="font-medium">{reviewItem.title}</span>
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <Badge variant="secondary" className="text-xs">
-                  置信度 {(reviewItem.confidence * 100).toFixed(0)}%
+                  置信度 {Math.round(reviewItem.confidence * 100)}%
                 </Badge>
                 {reviewItem.score !== undefined && (
                   <Badge variant="outline" className="text-xs">
@@ -211,18 +174,18 @@ export function MobileReasoningModal({ isOpen, onClose, reviewItem }: MobileReas
               </div>
             </div>
 
-            <div className="flex px-4 gap-1">
+            <div className="flex gap-1 px-4">
               {[
                 { id: 'flow', label: '推理链' },
                 { id: 'docs', label: '文档' },
-                { id: 'path', label: '本体路径' },
+                { id: 'path', label: '本体路径' }
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={cn(
-                    'flex-1 py-2 text-sm font-medium border-b-2 transition-colors',
-                    activeTab === tab.id ? 'border-blue-500 text-blue-600' : 'border-transparent text-muted-foreground',
+                    'flex-1 border-b-2 py-2 text-sm font-medium transition-colors',
+                    activeTab === tab.id ? 'border-blue-500 text-blue-600' : 'border-transparent text-muted-foreground'
                   )}
                 >
                   {tab.label}
@@ -232,68 +195,75 @@ export function MobileReasoningModal({ isOpen, onClose, reviewItem }: MobileReas
           </div>
 
           <ScrollArea className="h-[calc(100vh-180px)]">
-            <div className="p-4 space-y-4">
-              <Card className="bg-blue-500/5 border-blue-500/20">
+            <div className="space-y-4 p-4">
+              <Card className="border-blue-500/20 bg-blue-500/5">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     结论摘要
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{chain.conclusion}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {isLoading ? '正在加载推理依据...' : reasoning?.chain.conclusion ?? '暂无推理结论。'}
+                  </p>
                 </CardContent>
               </Card>
 
-              {activeTab === 'flow' && (
+              {!isLoading && reasoning && activeTab === 'flow' && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-purple-500" />
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <GitBranch className="h-4 w-4 text-purple-500" />
                       推理流程
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <MobileReasoningFlow chain={chain} />
+                    <MobileReasoningFlow chain={reasoning.chain} />
                   </CardContent>
                 </Card>
               )}
 
-              {activeTab === 'docs' && (
+              {!isLoading && reasoning && activeTab === 'docs' && (
                 <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">共检索到 {chain.documents.length} 个相关文档片段</div>
-                  {chain.documents.map((document) => (
+                  <div className="text-sm text-muted-foreground">共检索到 {reasoning.chain.documents.length} 个相关文档片段</div>
+                  {reasoning.chain.documents.map((document) => (
                     <DocumentFragment key={document.id} fragment={document} />
                   ))}
                 </div>
               )}
 
-              {activeTab === 'path' && (
+              {!isLoading && reasoning && activeTab === 'path' && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Target className="w-4 h-4 text-orange-500" />
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Target className="h-4 w-4 text-orange-500" />
                       本体路径
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap items-center gap-2">
-                      {['风险本体', '技术成熟度', '可行性评估', '评审结论'].map((path, index, array) => (
+                      {reasoning.ontologyPathLabels.map((path, index) => (
                         <div key={path} className="flex items-center gap-2">
                           <Badge
                             variant="secondary"
-                            className={cn('text-xs py-1.5', index === 1 && 'bg-blue-500/20 text-blue-700 ring-1 ring-blue-500')}
+                            className={cn(
+                              'py-1.5 text-xs',
+                              index === reasoning.ontologyPathLabels.length - 1 && 'bg-blue-500/20 text-blue-700 ring-1 ring-blue-500'
+                            )}
                           >
                             {path}
                           </Badge>
-                          {index < array.length - 1 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                          {index < reasoning.ontologyPathLabels.length - 1 && (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="mt-4 rounded-lg bg-muted/50 p-3">
                       <p className="text-sm text-muted-foreground">
-                        当前推理涉及 <span className="font-medium text-foreground">4</span> 个本体节点，路径深度为{' '}
-                        <span className="font-medium text-foreground">3</span> 层。
+                        当前推理涉及 <span className="font-medium text-foreground">{reasoning.ontologyPathLabels.length}</span> 个本体节点，
+                        便于追踪结论从哪条路径得出。
                       </p>
                     </div>
                   </CardContent>

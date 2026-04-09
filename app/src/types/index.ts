@@ -25,6 +25,13 @@ export interface ContextVector {
   color: string;
 }
 
+export interface RecentConcept {
+  id: string;
+  name: string;
+  count: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
 // Review item
 export interface ReviewItem {
   id: string;
@@ -98,4 +105,91 @@ export interface SystemStatus {
   ontologyVersion: string;
   confidence: number;
   isOnline: boolean;
+}
+
+export interface ReviewActivity {
+  id: string;
+  action: string;
+  target: string;
+  type: 'success' | 'warning' | 'info';
+  createdAt: string;
+}
+
+export interface ReviewStats {
+  total: number;
+  completed: number;
+  pending: number;
+  disputed: number;
+  avgConfidence: number;
+}
+
+export interface OntologyData {
+  tree: OntologyNode;
+  contextVectors: ContextVector[];
+  recentConcepts: RecentConcept[];
+}
+
+export interface ReasoningData {
+  itemId: string;
+  chain: ReasoningChain;
+  ontologyPathIds: string[];
+  ontologyPathLabels: string[];
+}
+
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+  tags: string[];
+  updatedAt: string;
+}
+
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  description: string;
+  updatedAt: string;
+  documents: KnowledgeDocument[];
+}
+
+export interface KnowledgeSearchResult {
+  query: string;
+  source: string;
+  total: number;
+  documents: KnowledgeDocument[];
+}
+
+export interface LlmCompletionResult {
+  provider: string;
+  model: string;
+  useCase: string;
+  text: string;
+  createdAt: string;
+  relatedDocuments?: KnowledgeDocument[];
+}
+
+export interface ChatConfig {
+  welcomeMessage: string;
+  quickActions: string[];
+}
+
+export interface AuthSession {
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    role: UserRole;
+  };
+}
+
+export interface AppStatePayload {
+  project: ProjectInfo;
+  systemStatus: Omit<SystemStatus, 'lastUpdate'> & { lastUpdate: string };
+  reviewItems: ReviewItem[];
+  ontology: OntologyData;
+  activityFeed: ReviewActivity[];
+  knowledgeBase: KnowledgeBase;
+  chatConfig: ChatConfig;
 }

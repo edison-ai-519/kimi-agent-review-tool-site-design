@@ -1,79 +1,11 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Network, Target, Zap, TrendingUp, ChevronRight, Search } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronRight, Network, Search, Target, TrendingUp, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
-import type { OntologyNode, ContextVector } from '@/types';
-
-const mockOntology: OntologyNode = {
-  id: 'root',
-  name: '科研项目评审',
-  weight: 1,
-  children: [
-    {
-      id: 'innovation',
-      name: '创新性',
-      weight: 0.25,
-      children: [
-        { id: 'novelty', name: '技术新颖性', weight: 0.6 },
-        { id: 'advancement', name: '技术先进性', weight: 0.4 },
-      ],
-    },
-    {
-      id: 'feasibility',
-      name: '可行性',
-      weight: 0.3,
-      children: [
-        { id: 'tech-maturity', name: '技术成熟度', weight: 0.4 },
-        { id: 'team-capability', name: '团队能力', weight: 0.35 },
-        { id: 'resource-guarantee', name: '资源保障', weight: 0.25 },
-      ],
-    },
-    {
-      id: 'team',
-      name: '团队实力',
-      weight: 0.2,
-      children: [
-        { id: 'pi-experience', name: '负责人经验', weight: 0.5 },
-        { id: 'team-structure', name: '团队结构', weight: 0.3 },
-        { id: 'cooperation', name: '协作基础', weight: 0.2 },
-      ],
-    },
-    {
-      id: 'budget',
-      name: '预算合理性',
-      weight: 0.15,
-      children: [
-        { id: 'cost-estimate', name: '成本估算', weight: 0.5 },
-        { id: 'funding-plan', name: '经费计划', weight: 0.5 },
-      ],
-    },
-    {
-      id: 'risk',
-      name: '风险管控',
-      weight: 0.1,
-      children: [
-        { id: 'tech-risk', name: '技术风险', weight: 0.6 },
-        { id: 'mgmt-risk', name: '管理风险', weight: 0.4 },
-      ],
-    },
-  ],
-};
-
-const mockContextVectors: ContextVector[] = [
-  { name: '需求本体', value: 0.6, color: '#3b82f6' },
-  { name: '方案本体', value: 0.3, color: '#f97316' },
-  { name: '风险本体', value: 0.1, color: '#ef4444' },
-];
-
-const mockRecentConcepts = [
-  { id: '1', name: '技术成熟度', count: 12, trend: 'up' as const },
-  { id: '2', name: '团队能力', count: 8, trend: 'stable' as const },
-  { id: '3', name: '创新性', count: 6, trend: 'up' as const },
-  { id: '4', name: '预算合理性', count: 4, trend: 'down' as const },
-];
+import type { ContextVector, OntologyData, OntologyNode } from '@/types';
 
 interface OntologyTreeItemProps {
   node: OntologyNode;
@@ -83,44 +15,45 @@ interface OntologyTreeItemProps {
 
 function OntologyTreeItem({ node, level, searchQuery }: OntologyTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(level < 1);
-  const hasChildren = node.children && node.children.length > 0;
-  const matchesSearch = searchQuery && node.name.toLowerCase().includes(searchQuery.toLowerCase());
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  const matchesSearch = searchQuery.trim().length > 0 && node.name.toLowerCase().includes(searchQuery.toLowerCase());
 
   return (
     <div className="select-none">
       <motion.div
-        initial={{ opacity: 0, x: -10 }}
+        initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 1, x: 0 }}
         className={cn(
-          'flex items-center gap-2 py-2.5 px-3 rounded-lg cursor-pointer transition-all duration-200',
-          'hover:bg-muted/50 active:bg-muted',
-          matchesSearch && 'bg-amber-500/10',
+          'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 active:bg-muted',
+          matchesSearch && 'bg-amber-500/10'
         )}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
-        onClick={() => hasChildren && setIsExpanded(!isExpanded)}
+        onClick={() => {
+          if (hasChildren) {
+            setIsExpanded((current) => !current);
+          }
+        }}
       >
         {hasChildren ? (
           <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </motion.div>
         ) : (
-          <div className="w-4" />
+          <div className="h-4 w-4" />
         )}
 
         <div
           className={cn(
-            'w-2.5 h-2.5 rounded-full',
-            level === 0 ? 'bg-blue-500' : level === 1 ? 'bg-blue-400' : 'bg-blue-300',
+            'h-2.5 w-2.5 rounded-full',
+            level === 0 ? 'bg-blue-500' : level === 1 ? 'bg-blue-400' : 'bg-blue-300'
           )}
         />
 
-        <span className={cn('text-sm flex-1', level === 0 ? 'font-semibold' : 'font-normal')}>{node.name}</span>
+        <span className={cn('flex-1 text-sm', level === 0 ? 'font-semibold' : 'font-normal')}>{node.name}</span>
 
-        {node.weight > 0 && (
-          <Badge variant="secondary" className="text-xs">
-            {(node.weight * 100).toFixed(0)}%
-          </Badge>
-        )}
+        <Badge variant="secondary" className="text-xs">
+          {Math.round(node.weight * 100)}%
+        </Badge>
       </motion.div>
 
       <AnimatePresence>
@@ -129,7 +62,7 @@ function OntologyTreeItem({ node, level, searchQuery }: OntologyTreeItemProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.25 }}
             className="overflow-hidden"
           >
             {node.children?.map((child) => (
@@ -146,21 +79,19 @@ function MobileRadarChart({ vectors }: { vectors: ContextVector[] }) {
   const size = 140;
   const center = size / 2;
   const radius = 50;
-  const angleStep = (2 * Math.PI) / vectors.length;
+  const angleStep = (Math.PI * 2) / vectors.length;
 
   const points = vectors.map((vector, index) => {
     const angle = index * angleStep - Math.PI / 2;
     const pointRadius = radius * vector.value;
     return {
-      x: center + pointRadius * Math.cos(angle),
-      y: center + pointRadius * Math.sin(angle),
       ...vector,
+      x: center + pointRadius * Math.cos(angle),
+      y: center + pointRadius * Math.sin(angle)
     };
   });
 
-  const pathData = `${points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-    .join(' ')} Z`;
+  const pathData = `${points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')} Z`;
 
   return (
     <div className="flex flex-col items-center">
@@ -196,31 +127,31 @@ function MobileRadarChart({ vectors }: { vectors: ContextVector[] }) {
 
         <motion.path
           d={pathData}
-          fill="url(#mobileGradient)"
+          fill="url(#mobile-context-gradient)"
           stroke="#3b82f6"
           strokeWidth="2"
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: 0.7 }}
-          transition={{ duration: 1 }}
+          transition={{ duration: 0.8 }}
         />
 
         {points.map((point, index) => (
           <motion.circle
-            key={index}
+            key={point.name}
             cx={point.x}
             cy={point.y}
             r="5"
             fill={point.color}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.5 + index * 0.1 }}
+            transition={{ delay: 0.35 + index * 0.08 }}
           />
         ))}
 
         <defs>
-          <linearGradient id="mobileGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#f97316" stopOpacity="0.3" />
+          <linearGradient id="mobile-context-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#f97316" stopOpacity="0.25" />
           </linearGradient>
         </defs>
       </svg>
@@ -228,9 +159,9 @@ function MobileRadarChart({ vectors }: { vectors: ContextVector[] }) {
       <div className="flex flex-wrap justify-center gap-3">
         {vectors.map((vector) => (
           <div key={vector.name} className="flex items-center gap-1.5 text-xs">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: vector.color }} />
+            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: vector.color }} />
             <span className="text-muted-foreground">{vector.name}</span>
-            <span className="font-medium">{(vector.value * 100).toFixed(0)}%</span>
+            <span className="font-medium">{Math.round(vector.value * 100)}%</span>
           </div>
         ))}
       </div>
@@ -241,9 +172,10 @@ function MobileRadarChart({ vectors }: { vectors: ContextVector[] }) {
 interface MobileOntologyDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  ontology: OntologyData;
 }
 
-export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerProps) {
+export function MobileOntologyDrawer({ isOpen, onClose, ontology }: MobileOntologyDrawerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSection, setActiveSection] = useState<'tree' | 'vector' | 'recent'>('tree');
 
@@ -256,7 +188,7 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50"
+            className="fixed inset-0 z-50 bg-black/50"
           />
 
           <motion.div
@@ -264,38 +196,38 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl max-h-[85vh]"
+            className="fixed bottom-0 left-0 right-0 z-50 max-h-[85vh] rounded-t-3xl bg-background"
           >
-            <div className="flex justify-center pt-3 pb-1" onClick={onClose}>
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+            <div className="flex justify-center pb-1 pt-3" onClick={onClose}>
+              <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
             </div>
 
-            <div className="px-4 py-3 border-b border-border/50">
+            <div className="border-b border-border/50 px-4 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Network className="w-5 h-5 text-blue-500" />
-                  <span className="font-semibold text-lg">本体导航</span>
+                  <Network className="h-5 w-5 text-blue-500" />
+                  <span className="text-lg font-semibold">本体导航</span>
                 </div>
-                <button onClick={onClose} className="p-2 rounded-full hover:bg-muted/50">
-                  <X className="w-5 h-5" />
+                <button onClick={onClose} className="rounded-full p-2 hover:bg-muted/50">
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="flex gap-2 mt-3">
+              <div className="mt-3 flex gap-2">
                 {[
                   { id: 'tree', label: '本体树', icon: Network },
                   { id: 'vector', label: '情境向量', icon: Target },
-                  { id: 'recent', label: '激活概念', icon: Zap },
+                  { id: 'recent', label: '激活概念', icon: Zap }
                 ].map((section) => (
                   <button
                     key={section.id}
                     onClick={() => setActiveSection(section.id as typeof activeSection)}
                     className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors',
-                      activeSection === section.id ? 'bg-blue-500 text-white' : 'bg-muted text-muted-foreground',
+                      'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors',
+                      activeSection === section.id ? 'bg-blue-500 text-white' : 'bg-muted text-muted-foreground'
                     )}
                   >
-                    <section.icon className="w-3.5 h-3.5" />
+                    <section.icon className="h-3.5 w-3.5" />
                     {section.label}
                   </button>
                 ))}
@@ -307,7 +239,7 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
                 {activeSection === 'tree' && (
                   <div>
                     <div className="relative mb-4">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         placeholder="搜索本体概念..."
                         value={searchQuery}
@@ -316,19 +248,19 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
                       />
                     </div>
                     <div className="space-y-1">
-                      <OntologyTreeItem node={mockOntology} level={0} searchQuery={searchQuery} />
+                      <OntologyTreeItem node={ontology.tree} level={0} searchQuery={searchQuery} />
                     </div>
                   </div>
                 )}
 
                 {activeSection === 'vector' && (
                   <div className="py-4">
-                    <div className="text-sm text-muted-foreground text-center mb-2">当前激活的情境联合向量</div>
-                    <MobileRadarChart vectors={mockContextVectors} />
-                    <div className="mt-6 p-4 bg-muted/50 rounded-xl">
-                      <h4 className="font-medium mb-2">向量说明</h4>
-                      <p className="text-sm text-muted-foreground">
-                        情境联合向量展示了当前评审过程中各类本体维度的权重分布。当前需求本体占比最高，说明系统更关注项目目标与需求匹配度；方案本体和风险本体则用于补充方案完整性与风险识别。
+                    <div className="mb-2 text-center text-sm text-muted-foreground">当前激活的情境联合向量</div>
+                    <MobileRadarChart vectors={ontology.contextVectors} />
+                    <div className="mt-6 rounded-xl bg-muted/50 p-4">
+                      <h4 className="mb-2 font-medium">向量说明</h4>
+                      <p className="text-sm leading-relaxed text-muted-foreground">
+                        这里展示的是当前评审过程中，各类本体维度的权重分布。数值越高，说明系统越倾向在该维度上补充依据与判断。
                       </p>
                     </div>
                   </div>
@@ -336,17 +268,17 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
 
                 {activeSection === 'recent' && (
                   <div className="space-y-3">
-                    <div className="text-sm text-muted-foreground mb-4">本次评审中高频使用的本体节点</div>
-                    {mockRecentConcepts.map((concept, index) => (
+                    <div className="mb-4 text-sm text-muted-foreground">本次评审中高频使用的本体节点</div>
+                    {ontology.recentConcepts.map((concept, index) => (
                       <motion.div
                         key={concept.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="flex items-center gap-3 p-4 rounded-xl bg-muted/50"
+                        className="flex items-center gap-3 rounded-xl bg-muted/50 p-4"
                       >
-                        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                          <Zap className="w-5 h-5 text-blue-500" />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                          <Zap className="h-5 w-5 text-blue-500" />
                         </div>
                         <div className="flex-1">
                           <div className="font-medium">{concept.name}</div>
@@ -355,13 +287,13 @@ export function MobileOntologyDrawer({ isOpen, onClose }: MobileOntologyDrawerPr
                         <div className="flex items-center gap-2">
                           {concept.trend === 'up' && (
                             <Badge className="bg-green-500/10 text-green-600">
-                              <TrendingUp className="w-3 h-3 mr-1" />
+                              <TrendingUp className="mr-1 h-3 w-3" />
                               上升
                             </Badge>
                           )}
                           {concept.trend === 'down' && (
                             <Badge className="bg-red-500/10 text-red-600">
-                              <TrendingUp className="w-3 h-3 mr-1 rotate-180" />
+                              <TrendingUp className="mr-1 h-3 w-3 rotate-180" />
                               下降
                             </Badge>
                           )}

@@ -1,0 +1,237 @@
+{
+  "project": {
+    "id": "project-001",
+    "name": "基于多模态学习的智慧影像辅助诊断平台",
+    "applicant": "清华大学计算机科学与技术系",
+    "budget": "500万元",
+    "duration": "2026.01 - 2028.12",
+    "field": "人工智能 / 医疗健康",
+    "stage": "proposal"
+  },
+  "systemStatus": {
+    "version": "2.2.0",
+    "lastUpdate": "2026-04-09T09:00:00.000Z",
+    "ontologyVersion": "3.6.0",
+    "confidence": 0.89,
+    "isOnline": true
+  },
+  "reviewItems": [
+    {
+      "id": "1",
+      "title": "技术创新性",
+      "description": "评估项目技术路线是否具有原创性、先进性，以及与现有方案相比的差异化优势。",
+      "status": "reviewed",
+      "confidence": 0.88,
+      "score": 27,
+      "maxScore": 30,
+      "comment": "项目在跨模态蒸馏与影像报告联合建模方面有一定新意，建议补充与现有公开方案的对比实验设计。"
+    },
+    {
+      "id": "2",
+      "title": "技术可行性",
+      "description": "评估关键技术是否具备落地条件，包括数据准备、实现路径、部署复杂度与潜在技术风险。",
+      "status": "pending",
+      "confidence": 0.74,
+      "maxScore": 25
+    },
+    {
+      "id": "3",
+      "title": "团队与组织能力",
+      "description": "评估项目团队的核心成员配置、协作机制以及承担类似课题的经验积累。",
+      "status": "reviewed",
+      "confidence": 0.91,
+      "score": 23,
+      "maxScore": 25,
+      "comment": "核心成员结构较完整，算法、临床和工程三类角色均有覆盖，执行基础较好。"
+    },
+    {
+      "id": "4",
+      "title": "预算合理性",
+      "description": "评估经费结构是否清晰、投入比例是否合理，以及关键设备与数据成本说明是否充分。",
+      "status": "disputed",
+      "confidence": 0.66,
+      "score": 15,
+      "maxScore": 20,
+      "comment": "设备采购和标注成本占比较高，建议进一步拆分采购项并说明与研究目标的直接关系。"
+    }
+  ],
+  "ontology": {
+    "tree": {
+      "id": "root",
+      "name": "科研项目评审本体",
+      "weight": 1,
+      "children": [
+        {
+          "id": "innovation",
+          "name": "创新性",
+          "weight": 0.28,
+          "children": [
+            {
+              "id": "novelty",
+              "name": "技术新颖性",
+              "weight": 0.55
+            },
+            {
+              "id": "advancement",
+              "name": "技术先进性",
+              "weight": 0.45
+            }
+          ]
+        },
+        {
+          "id": "feasibility",
+          "name": "可行性",
+          "weight": 0.30,
+          "children": [
+            {
+              "id": "tech-maturity",
+              "name": "技术成熟度",
+              "weight": 0.4
+            },
+            {
+              "id": "data-readiness",
+              "name": "数据准备度",
+              "weight": 0.35
+            },
+            {
+              "id": "deployment-path",
+              "name": "实施路径",
+              "weight": 0.25
+            }
+          ]
+        },
+        {
+          "id": "team",
+          "name": "团队能力",
+          "weight": 0.22,
+          "children": [
+            {
+              "id": "leader-experience",
+              "name": "负责人经验",
+              "weight": 0.4
+            },
+            {
+              "id": "team-structure",
+              "name": "团队结构",
+              "weight": 0.35
+            },
+            {
+              "id": "coordination",
+              "name": "协作机制",
+              "weight": 0.25
+            }
+          ]
+        },
+        {
+          "id": "budget",
+          "name": "预算结构",
+          "weight": 0.12,
+          "children": [
+            {
+              "id": "procurement",
+              "name": "设备采购",
+              "weight": 0.5
+            },
+            {
+              "id": "annotation-cost",
+              "name": "数据与标注成本",
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "id": "risk",
+          "name": "风险控制",
+          "weight": 0.08,
+          "children": [
+            {
+              "id": "tech-risk",
+              "name": "技术风险",
+              "weight": 0.6
+            },
+            {
+              "id": "management-risk",
+              "name": "管理风险",
+              "weight": 0.4
+            }
+          ]
+        }
+      ]
+    },
+    "contextVectors": [
+      {
+        "name": "需求本体",
+        "value": 0.58,
+        "color": "#3b82f6"
+      },
+      {
+        "name": "方案本体",
+        "value": 0.32,
+        "color": "#f97316"
+      },
+      {
+        "name": "风险本体",
+        "value": 0.22,
+        "color": "#ef4444"
+      }
+    ],
+    "recentConcepts": [
+      {
+        "id": "concept-1",
+        "name": "技术成熟度",
+        "count": 12,
+        "trend": "up"
+      },
+      {
+        "id": "concept-2",
+        "name": "数据准备度",
+        "count": 9,
+        "trend": "stable"
+      },
+      {
+        "id": "concept-3",
+        "name": "协作机制",
+        "count": 6,
+        "trend": "up"
+      },
+      {
+        "id": "concept-4",
+        "name": "设备采购",
+        "count": 4,
+        "trend": "down"
+      }
+    ]
+  },
+  "activityFeed": [
+    {
+      "id": "activity-1",
+      "action": "完成",
+      "target": "技术创新性评审",
+      "type": "success",
+      "createdAt": "2026-04-09T08:50:00.000Z"
+    },
+    {
+      "id": "activity-2",
+      "action": "标记争议",
+      "target": "预算合理性",
+      "type": "warning",
+      "createdAt": "2026-04-09T08:35:00.000Z"
+    },
+    {
+      "id": "activity-3",
+      "action": "查看",
+      "target": "技术可行性依据",
+      "type": "info",
+      "createdAt": "2026-04-09T08:10:00.000Z"
+    }
+  ],
+  "chatConfig": {
+    "welcomeMessage": "你好，我是评审助手。你可以让我概括创新亮点、解释预算争议，或根据模拟知识库生成一段辅助意见。",
+    "quickActions": [
+      "分析技术风险",
+      "概括创新亮点",
+      "解释预算争议",
+      "生成评审意见"
+    ]
+  }
+}

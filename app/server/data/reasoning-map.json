@@ -1,0 +1,352 @@
+{
+  "1": {
+    "itemId": "1",
+    "ontologyPathIds": [
+      "innovation",
+      "novelty",
+      "advancement"
+    ],
+    "ontologyPathLabels": [
+      "创新性",
+      "技术新颖性",
+      "技术先进性"
+    ],
+    "chain": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "跨模态蒸馏方案",
+          "type": "input",
+          "confidence": 1
+        },
+        {
+          "id": "ontology",
+          "label": "创新性节点命中",
+          "type": "ontology",
+          "confidence": 0.9
+        },
+        {
+          "id": "rule",
+          "label": "存在差异化亮点",
+          "type": "rule",
+          "confidence": 0.84
+        },
+        {
+          "id": "conclusion",
+          "label": "建议高分但需补对比",
+          "type": "conclusion",
+          "confidence": 0.82
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "ontology",
+          "label": "映射到",
+          "strength": 0.92
+        },
+        {
+          "from": "ontology",
+          "to": "rule",
+          "label": "触发",
+          "strength": 0.86
+        },
+        {
+          "from": "rule",
+          "to": "conclusion",
+          "label": "推导出",
+          "strength": 0.8
+        }
+      ],
+      "conclusion": "项目在多模态协同与跨模态蒸馏上具有一定差异化，创新性可给高分，但仍建议补充与已有公开方案的对比实验边界。",
+      "documents": [
+        {
+          "id": "doc-1-1",
+          "source": "申报书摘要（模拟）",
+          "content": "方案强调跨模态蒸馏、轻量化部署和连续评估机制，体现出一定的技术整合能力。",
+          "highlights": [
+            "跨模态蒸馏",
+            "轻量化部署",
+            "连续评估机制"
+          ],
+          "relevance": 0.93
+        },
+        {
+          "id": "doc-1-2",
+          "source": "同类项目评审纪要（模拟）",
+          "content": "对于创新性较强的方案，专家通常希望看到更清晰的阶段目标和中等规模数据集上的稳健性说明。",
+          "highlights": [
+            "创新性较强",
+            "阶段目标",
+            "稳健性说明"
+          ],
+          "relevance": 0.87
+        }
+      ]
+    }
+  },
+  "2": {
+    "itemId": "2",
+    "ontologyPathIds": [
+      "feasibility",
+      "tech-maturity",
+      "deployment-path",
+      "risk"
+    ],
+    "ontologyPathLabels": [
+      "可行性",
+      "技术成熟度",
+      "实施路径",
+      "风险控制"
+    ],
+    "chain": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "数据与部署说明不足",
+          "type": "input",
+          "confidence": 1
+        },
+        {
+          "id": "ontology",
+          "label": "可行性节点预警",
+          "type": "ontology",
+          "confidence": 0.88
+        },
+        {
+          "id": "rule",
+          "label": "需补充落地路径",
+          "type": "rule",
+          "confidence": 0.82
+        },
+        {
+          "id": "conclusion",
+          "label": "建议谨慎推进",
+          "type": "conclusion",
+          "confidence": 0.76
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "ontology",
+          "label": "匹配到",
+          "strength": 0.9
+        },
+        {
+          "from": "ontology",
+          "to": "rule",
+          "label": "触发",
+          "strength": 0.84
+        },
+        {
+          "from": "rule",
+          "to": "conclusion",
+          "label": "形成结论",
+          "strength": 0.8
+        }
+      ],
+      "conclusion": "当前数据来源、医院侧部署资源和失败回退方案说明不足，可行性存在中等风险，建议要求申报方补充实施路径与验证计划。",
+      "documents": [
+        {
+          "id": "doc-2-1",
+          "source": "申报书摘要（模拟）",
+          "content": "对训练数据来源、医院侧算力和回退方案的说明仍较为简略。",
+          "highlights": [
+            "训练数据来源",
+            "医院侧算力",
+            "回退方案"
+          ],
+          "relevance": 0.95
+        },
+        {
+          "id": "doc-2-2",
+          "source": "同类项目评审纪要（模拟）",
+          "content": "多模态医疗项目普遍在数据清洗、标注一致性和院内部署链路上出现问题。",
+          "highlights": [
+            "数据清洗",
+            "标注一致性",
+            "院内部署链路"
+          ],
+          "relevance": 0.9
+        }
+      ]
+    }
+  },
+  "3": {
+    "itemId": "3",
+    "ontologyPathIds": [
+      "team",
+      "leader-experience",
+      "team-structure",
+      "coordination"
+    ],
+    "ontologyPathLabels": [
+      "团队能力",
+      "负责人经验",
+      "团队结构",
+      "协作机制"
+    ],
+    "chain": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "角色覆盖较完整",
+          "type": "input",
+          "confidence": 1
+        },
+        {
+          "id": "ontology",
+          "label": "团队能力节点命中",
+          "type": "ontology",
+          "confidence": 0.92
+        },
+        {
+          "id": "rule",
+          "label": "执行条件较充分",
+          "type": "rule",
+          "confidence": 0.86
+        },
+        {
+          "id": "conclusion",
+          "label": "团队能力较强",
+          "type": "conclusion",
+          "confidence": 0.84
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "ontology",
+          "label": "匹配到",
+          "strength": 0.92
+        },
+        {
+          "from": "ontology",
+          "to": "rule",
+          "label": "触发",
+          "strength": 0.87
+        },
+        {
+          "from": "rule",
+          "to": "conclusion",
+          "label": "支撑",
+          "strength": 0.84
+        }
+      ],
+      "conclusion": "团队结构覆盖算法、临床和平台工程三类角色，协作机制描述较完整，整体执行能力较强。",
+      "documents": [
+        {
+          "id": "doc-3-1",
+          "source": "团队协作说明（模拟）",
+          "content": "建议在组织方案中注明算法组、临床组和平台组的分工边界与周例会机制。",
+          "highlights": [
+            "算法组",
+            "临床组",
+            "平台组"
+          ],
+          "relevance": 0.94
+        },
+        {
+          "id": "doc-3-2",
+          "source": "同类项目评审纪要（模拟）",
+          "content": "专家通常关注关键节点的阶段目标是否清晰，以及协同经验是否匹配执行复杂度。",
+          "highlights": [
+            "阶段目标",
+            "协同经验",
+            "执行复杂度"
+          ],
+          "relevance": 0.79
+        }
+      ]
+    }
+  },
+  "4": {
+    "itemId": "4",
+    "ontologyPathIds": [
+      "budget",
+      "procurement",
+      "annotation-cost",
+      "risk"
+    ],
+    "ontologyPathLabels": [
+      "预算结构",
+      "设备采购",
+      "数据与标注成本",
+      "风险控制"
+    ],
+    "chain": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "采购与标注占比较高",
+          "type": "input",
+          "confidence": 1
+        },
+        {
+          "id": "ontology",
+          "label": "预算节点触发争议",
+          "type": "ontology",
+          "confidence": 0.83
+        },
+        {
+          "id": "rule",
+          "label": "需拆分经费结构",
+          "type": "rule",
+          "confidence": 0.79
+        },
+        {
+          "id": "conclusion",
+          "label": "建议补充说明后再定分",
+          "type": "conclusion",
+          "confidence": 0.71
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "ontology",
+          "label": "映射到",
+          "strength": 0.88
+        },
+        {
+          "from": "ontology",
+          "to": "rule",
+          "label": "触发",
+          "strength": 0.81
+        },
+        {
+          "from": "rule",
+          "to": "conclusion",
+          "label": "导出",
+          "strength": 0.77
+        }
+      ],
+      "conclusion": "预算主要争议集中在设备采购与标注成本占比偏高，建议补充拆分明细、关联目标说明和后续运维边界，再决定最终分数。",
+      "documents": [
+        {
+          "id": "doc-4-1",
+          "source": "预算说明模板（模拟）",
+          "content": "预算审查通常关注高额设备采购、数据标注费用和后续测试运维是否重复计列。",
+          "highlights": [
+            "高额设备采购",
+            "数据标注费用",
+            "测试运维"
+          ],
+          "relevance": 0.96
+        },
+        {
+          "id": "doc-4-2",
+          "source": "申报书摘要（模拟）",
+          "content": "方案强调轻量化部署，但缺少对医院侧资源配置与采购边界的细化说明。",
+          "highlights": [
+            "轻量化部署",
+            "资源配置",
+            "采购边界"
+          ],
+          "relevance": 0.74
+        }
+      ]
+    }
+  }
+}

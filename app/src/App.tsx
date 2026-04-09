@@ -1,219 +1,204 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { TopNavigation } from '@/components/navigation/TopNavigation';
-import { BottomStatusBar } from '@/components/navigation/BottomStatusBar';
-import { MobileBottomNav } from '@/components/navigation/MobileBottomNav';
-import { OntologyPanel } from '@/components/panels/OntologyPanel';
-import { ReviewWorkspace } from '@/components/panels/ReviewWorkspace';
-import { ReasoningPanel } from '@/components/panels/ReasoningPanel';
-import { FloatingChat } from '@/components/chat/FloatingChat';
-import { MobileOntologyDrawer } from '@/components/mobile/MobileOntologyDrawer';
-import { MobileReasoningModal } from '@/components/mobile/MobileReasoningModal';
-import { MobileChatModal } from '@/components/mobile/MobileChatModal';
-import { MobileHomeView } from '@/components/mobile/MobileHomeView';
-import { useIsMobile } from '@/hooks/useMediaQuery';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, type FormEvent } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  User,
-  Lock,
+  ArrowRight,
+  CheckCircle2,
   Eye,
   EyeOff,
-  ArrowRight,
-  Sparkles,
+  Lock,
   Network,
-  CheckCircle2,
+  Sparkles,
+  User
 } from 'lucide-react';
-import type { UserRole, ReviewStage, ProjectInfo, ReviewItem, SystemStatus } from '@/types';
+import { FloatingChat } from '@/components/chat/FloatingChat';
+import { BottomStatusBar } from '@/components/navigation/BottomStatusBar';
+import { MobileBottomNav } from '@/components/navigation/MobileBottomNav';
+import { TopNavigation } from '@/components/navigation/TopNavigation';
+import { MobileChatModal } from '@/components/mobile/MobileChatModal';
+import { MobileHomeView } from '@/components/mobile/MobileHomeView';
+import { MobileOntologyDrawer } from '@/components/mobile/MobileOntologyDrawer';
+import { MobileReasoningModal } from '@/components/mobile/MobileReasoningModal';
+import { OntologyPanel } from '@/components/panels/OntologyPanel';
+import { ReasoningPanel } from '@/components/panels/ReasoningPanel';
+import { ReviewWorkspace } from '@/components/panels/ReviewWorkspace';
+import { useReviewApp } from '@/hooks/useReviewApp';
+import { useIsMobile } from '@/hooks/useMediaQuery';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import type { ReviewItem, ReviewStage, ReviewStats, UserRole } from '@/types';
 import './App.css';
-
-const mockProject: ProjectInfo = {
-  id: '1',
-  name: '基于深度学习的智能医疗影像诊断系统',
-  applicant: '清华大学计算机科学与技术系',
-  budget: '500万元',
-  duration: '2024.01 - 2026.12',
-  field: '人工智能 / 医疗健康',
-  stage: 'proposal',
-};
-
-const mockSystemStatus: SystemStatus = {
-  version: '2.1.0',
-  lastUpdate: new Date(),
-  ontologyVersion: '3.5.2',
-  confidence: 0.87,
-  isOnline: true,
-};
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
 
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function buildReviewStats(reviewItems: ReviewItem[]): ReviewStats {
+  const completed = reviewItems.filter((item) => item.status === 'reviewed').length;
+  const pending = reviewItems.filter((item) => item.status === 'pending').length;
+  const disputed = reviewItems.filter((item) => item.status === 'disputed').length;
+  const avgConfidence =
+    reviewItems.length === 0 ? 0 : reviewItems.reduce((sum, item) => sum + item.confidence, 0) / reviewItems.length;
+
+  return {
+    total: reviewItems.length,
+    completed,
+    pending,
+    disputed,
+    avgConfidence
+  };
+}
+
+function LoginPage({
+  isLoading,
+  errorMessage,
+  onLogin
+}: {
+  isLoading: boolean;
+  errorMessage: string | null;
+  onLogin: (username: string, password: string) => Promise<void>;
+}) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const isMobile = useIsMobile();
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin();
-    }, 1500);
+    try {
+      await onLogin(username, password);
+    } catch {
+      // Error state is surfaced by the hook and rendered in the form.
+    }
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <div className="absolute inset-0">
-        {[...Array(20)].map((_, index) => (
+        {Array.from({ length: 16 }).map((_, index) => (
           <motion.div
             key={index}
-            className="absolute w-1 h-1 bg-blue-400/30 rounded-full"
+            className="absolute h-1 w-1 rounded-full bg-blue-400/30"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: `${(index * 17) % 100}%`,
+              top: `${(index * 11) % 100}%`
             }}
             animate={{
               y: [0, -30, 0],
-              opacity: [0.3, 0.8, 0.3],
+              opacity: [0.2, 0.8, 0.2]
             }}
             transition={{
-              duration: 3 + Math.random() * 2,
+              duration: 3 + (index % 4),
               repeat: Infinity,
-              delay: Math.random() * 2,
+              delay: index * 0.2
             }}
           />
         ))}
 
         <motion.div
-          className="absolute w-[600px] h-[600px] rounded-full bg-blue-500/10 blur-3xl"
-          style={{ top: '-200px', left: '-200px' }}
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.1, 0.2, 0.1],
-          }}
+          className="absolute left-[-200px] top-[-200px] h-[600px] w-[600px] rounded-full bg-blue-500/10 blur-3xl"
+          animate={{ scale: [1, 1.15, 1], opacity: [0.1, 0.2, 0.1] }}
           transition={{ duration: 8, repeat: Infinity }}
         />
         <motion.div
-          className="absolute w-[500px] h-[500px] rounded-full bg-purple-500/10 blur-3xl"
-          style={{ bottom: '-150px', right: '-150px' }}
-          animate={{
-            scale: [1.2, 1, 1.2],
-            opacity: [0.1, 0.2, 0.1],
-          }}
+          className="absolute bottom-[-150px] right-[-150px] h-[500px] w-[500px] rounded-full bg-purple-500/10 blur-3xl"
+          animate={{ scale: [1.15, 1, 1.15], opacity: [0.1, 0.2, 0.1] }}
           transition={{ duration: 10, repeat: Infinity }}
         />
       </div>
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+      <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
         <div className={`w-full ${isMobile ? 'max-w-sm' : 'max-w-md'}`}>
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-8"
-          >
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8 text-center">
             <motion.div
-              className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-blue-500/30"
-              whileHover={{ scale: 1.05, rotate: 5 }}
-              transition={{ type: 'spring', stiffness: 300 }}
+              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-2xl shadow-blue-500/30"
+              whileHover={{ scale: 1.04, rotate: 4 }}
             >
-              <Network className="w-10 h-10 text-white" />
+              <Network className="h-10 w-10 text-white" />
             </motion.div>
             <motion.h1
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-2xl sm:text-3xl font-bold text-white mb-2"
+              transition={{ delay: 0.2 }}
+              className="mb-2 text-2xl font-bold text-white sm:text-3xl"
             >
               本体智能评审系统
             </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-blue-200 text-sm sm:text-base"
-            >
-              透明 · 可解释 · 高效
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-sm text-blue-200 sm:text-base">
+              透明、可解释、可联调
             </motion.p>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, rotateX: 90 }}
-            animate={{ opacity: 1, rotateX: 0 }}
-            transition={{ duration: 1, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <Card className="backdrop-blur-xl bg-white/10 border-white/20">
+          <motion.div initial={{ opacity: 0, rotateX: 90 }} animate={{ opacity: 1, rotateX: 0 }} transition={{ duration: 0.8, delay: 0.35 }}>
+            <Card className="border-white/20 bg-white/10 backdrop-blur-xl">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg sm:text-xl text-white text-center">用户登录</CardTitle>
+                <CardTitle className="text-center text-lg text-white sm:text-xl">用户登录</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="text-sm text-blue-200 mb-1.5 block">用户名</label>
+                    <label className="mb-1.5 block text-sm text-blue-200">用户名</label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-300" />
+                      <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-300" />
                       <Input
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
-                        placeholder="请输入用户名"
-                        className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-blue-300/50 h-11"
+                        placeholder="输入任意用户名即可登录"
+                        className="h-11 border-white/20 bg-white/10 pl-10 text-white placeholder:text-blue-300/50"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-sm text-blue-200 mb-1.5 block">密码</label>
+                    <label className="mb-1.5 block text-sm text-blue-200">密码</label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-300" />
+                      <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-300" />
                       <Input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
-                        placeholder="请输入密码"
-                        className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-blue-300/50 h-11"
+                        placeholder="输入任意密码即可登录"
+                        className="h-11 border-white/20 bg-white/10 pl-10 pr-10 text-white placeholder:text-blue-300/50"
                       />
                       <button
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300 hover:text-white transition-colors"
+                        onClick={() => setShowPassword((current) => !current)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300 transition-colors hover:text-white"
                       >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
                     </div>
                   </div>
 
+                  {errorMessage && <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">{errorMessage}</div>}
+
                   <Button
                     type="submit"
                     disabled={isLoading || !username || !password}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white h-11"
+                    className="h-11 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700"
                   >
                     {isLoading ? (
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                        className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                        className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white"
                       />
                     ) : (
                       <>
-                        登录
-                        <ArrowRight className="w-4 h-4 ml-2" />
+                        登录并进入系统
+                        <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
                 </form>
 
-                <div className="mt-6 pt-4 border-t border-white/10">
+                <div className="mt-6 border-t border-white/10 pt-4">
                   <div className="flex items-center justify-center gap-4 text-sm">
                     <div className="flex items-center gap-1.5 text-blue-200">
-                      <CheckCircle2 className="w-4 h-4" />
+                      <CheckCircle2 className="h-4 w-4" />
                       <span>评审专家入口</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-blue-200">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>申报方入口</span>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>支持后端联调</span>
                     </div>
                   </div>
                 </div>
@@ -221,26 +206,21 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             </Card>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="mt-8 grid grid-cols-3 gap-4"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="mt-8 grid grid-cols-3 gap-4">
             {[
               { icon: Network, label: '本体驱动' },
-              { icon: Sparkles, label: '智能推理' },
-              { icon: CheckCircle2, label: '透明可解释' },
+              { icon: Sparkles, label: '接口预留' },
+              { icon: CheckCircle2, label: '可解释' }
             ].map((feature, index) => (
               <motion.div
                 key={feature.label}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9 + index * 0.1 }}
+                transition={{ delay: 0.8 + index * 0.08 }}
                 className="text-center"
               >
-                <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-white/10 flex items-center justify-center">
-                  <feature.icon className="w-6 h-6 text-blue-300" />
+                <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-white/10">
+                  <feature.icon className="h-6 w-6 text-blue-300" />
                 </div>
                 <span className="text-sm text-blue-200">{feature.label}</span>
               </motion.div>
@@ -252,36 +232,90 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function DesktopDashboard() {
+function LoadingPage({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+            className="h-10 w-10 rounded-full border-2 border-blue-500/20 border-t-blue-500"
+          />
+          <div>
+            <h2 className="font-semibold">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function DesktopDashboard({
+  appState,
+  chatMessages,
+  reasoningByItem,
+  isChatPending,
+  savingItemId,
+  generatingItemId,
+  reasoningLoadingItemId,
+  errorMessage,
+  onEnsureReasoning,
+  onSendChat,
+  onSaveReviewItem,
+  onGenerateComment
+}: {
+  appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
+  chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
+  reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
+  isChatPending: boolean;
+  savingItemId: string | null;
+  generatingItemId: string | null;
+  reasoningLoadingItemId: string | null;
+  errorMessage: string | null;
+  onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
+  onSendChat: (message: string, itemId?: string) => void;
+  onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
+  onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
+}) {
   const [userRole, setUserRole] = useState<UserRole>('expert');
-  const [currentStage, setCurrentStage] = useState<ReviewStage>('proposal');
-  const [selectedReviewItem, setSelectedReviewItem] = useState<ReviewItem | null>(null);
+  const [currentStage, setCurrentStage] = useState<ReviewStage>(appState.project.stage);
+  const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
+  const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
   const [isOntologyPanelCollapsed, setIsOntologyPanelCollapsed] = useState(false);
-  const [highlightedOntologyPath, setHighlightedOntologyPath] = useState<string[]>([]);
+
+  const currentProject = { ...appState.project, stage: currentStage };
+  const selectedReviewItem = appState.reviewItems.find((item) => item.id === selectedReviewItemId) ?? null;
+  const activeReviewItem = appState.reviewItems.find((item) => item.id === activeReviewItemId) ?? null;
+  const selectedReasoning = selectedReviewItem ? reasoningByItem[selectedReviewItem.id] ?? null : null;
+  const highlightedOntologyPath = selectedReasoning?.ontologyPathIds ?? [];
 
   const handleShowReasoning = (item: ReviewItem) => {
-    setSelectedReviewItem(item);
-    setHighlightedOntologyPath(['feasibility', 'tech-maturity', 'risk']);
+    setSelectedReviewItemId(item.id);
+    setActiveReviewItemId(item.id);
+    void onEnsureReasoning(item).catch(() => undefined);
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-screen flex-col bg-background">
       <TopNavigation
         userRole={userRole}
         currentStage={currentStage}
-        project={mockProject}
-        ontologyVersion={mockSystemStatus.ontologyVersion}
+        project={currentProject}
+        ontologyVersion={appState.systemStatus.ontologyVersion}
         onRoleChange={setUserRole}
         onStageChange={setCurrentStage}
       />
 
-      <div className="flex-1 flex pt-16 pb-8 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden pb-8 pt-16">
         <AnimatePresence mode="wait">
           {!isOntologyPanelCollapsed && (
             <OntologyPanel
+              ontology={appState.ontology}
               highlightedPath={highlightedOntologyPath}
               isCollapsed={isOntologyPanelCollapsed}
-              onToggleCollapse={() => setIsOntologyPanelCollapsed(!isOntologyPanelCollapsed)}
+              onToggleCollapse={() => setIsOntologyPanelCollapsed((current) => !current)}
             />
           )}
         </AnimatePresence>
@@ -291,37 +325,98 @@ function DesktopDashboard() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={() => setIsOntologyPanelCollapsed(false)}
-            className="fixed left-0 top-1/2 -translate-y-1/2 z-30 p-2 rounded-r-lg glass border border-l-0 border-border/50 hover:bg-muted/50 transition-colors"
+            className="fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-lg border border-l-0 border-border/50 p-2 transition-colors hover:bg-muted/50 glass"
           >
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="h-4 w-4" />
           </motion.button>
         )}
 
         <div className="flex-1 overflow-hidden px-4 py-4">
-          <ReviewWorkspace project={mockProject} onShowReasoning={handleShowReasoning} />
+          {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
+
+          <ReviewWorkspace
+            project={currentProject}
+            reviewItems={appState.reviewItems}
+            chatMessages={chatMessages}
+            chatConfig={appState.chatConfig}
+            isChatPending={isChatPending}
+            savingItemId={savingItemId}
+            generatingItemId={generatingItemId}
+            activeReviewItem={activeReviewItem}
+            onShowReasoning={handleShowReasoning}
+            onActiveReviewItemChange={setActiveReviewItemId}
+            onSendChat={onSendChat}
+            onSaveReviewItem={onSaveReviewItem}
+            onGenerateComment={onGenerateComment}
+          />
         </div>
 
         <AnimatePresence mode="wait">
-          <ReasoningPanel reviewItem={selectedReviewItem} onClose={() => setSelectedReviewItem(null)} />
+          <ReasoningPanel
+            reviewItem={selectedReviewItem}
+            reasoning={selectedReasoning}
+            isLoading={reasoningLoadingItemId === selectedReviewItem?.id}
+            onClose={() => setSelectedReviewItemId(null)}
+          />
         </AnimatePresence>
       </div>
 
-      <BottomStatusBar status={mockSystemStatus} />
-      <FloatingChat />
+      <BottomStatusBar status={appState.systemStatus} />
+
+      <FloatingChat
+        messages={chatMessages}
+        quickActions={appState.chatConfig.quickActions}
+        isPending={isChatPending}
+        activeReviewItem={activeReviewItem}
+        onSendMessage={(message) => onSendChat(message, activeReviewItem?.id)}
+      />
     </div>
   );
 }
 
-function MobileDashboard() {
+function MobileDashboard({
+  appState,
+  chatMessages,
+  reasoningByItem,
+  isChatPending,
+  savingItemId,
+  generatingItemId,
+  reasoningLoadingItemId,
+  errorMessage,
+  onEnsureReasoning,
+  onSendChat,
+  onSaveReviewItem,
+  onGenerateComment
+}: {
+  appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
+  chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
+  reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
+  isChatPending: boolean;
+  savingItemId: string | null;
+  generatingItemId: string | null;
+  reasoningLoadingItemId: string | null;
+  errorMessage: string | null;
+  onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
+  onSendChat: (message: string, itemId?: string) => void;
+  onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
+  onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
+}) {
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
-  const [selectedReviewItem, setSelectedReviewItem] = useState<ReviewItem | null>(null);
+  const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
+  const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
   const [isOntologyDrawerOpen, setIsOntologyDrawerOpen] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false);
+  const stats = buildReviewStats(appState.reviewItems);
+  const selectedReviewItem = appState.reviewItems.find((item) => item.id === selectedReviewItemId) ?? null;
+  const activeReviewItem = appState.reviewItems.find((item) => item.id === activeReviewItemId) ?? null;
+  const selectedReasoning = selectedReviewItem ? reasoningByItem[selectedReviewItem.id] ?? null : null;
 
   const handleShowReasoning = (item: ReviewItem) => {
-    setSelectedReviewItem(item);
+    setSelectedReviewItemId(item.id);
+    setActiveReviewItemId(item.id);
     setIsReasoningModalOpen(true);
+    void onEnsureReasoning(item).catch(() => undefined);
   };
 
   const handleTabChange = (tab: MobileTab) => {
@@ -339,29 +434,37 @@ function MobileDashboard() {
           setIsReasoningModalOpen(true);
         }
         break;
+      default:
+        break;
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="sticky top-0 z-40 glass-strong border-b border-border/50">
-        <div className="flex items-center justify-between px-4 h-14">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-40 border-b border-border/50 glass-strong">
+        <div className="flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-              <Network className="w-4 h-4 text-white" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-500">
+              <Network className="h-4 w-4 text-white" />
             </div>
-            <span className="font-semibold text-sm truncate max-w-[150px]">{mockProject.name}</span>
+            <span className="max-w-[150px] truncate text-sm font-semibold">{appState.project.name}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs text-muted-foreground">在线</span>
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-xs text-muted-foreground">{appState.systemStatus.isOnline ? '在线' : '离线'}</span>
           </div>
         </div>
       </header>
 
       <main className="flex-1 overflow-auto p-4">
+        {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
+
         {activeTab === 'home' && (
           <MobileHomeView
+            project={appState.project}
+            stats={stats}
+            activityFeed={appState.activityFeed}
+            systemStatus={appState.systemStatus}
             onViewReview={() => setActiveTab('review')}
             onViewOntology={() => setIsOntologyDrawerOpen(true)}
           />
@@ -369,13 +472,28 @@ function MobileDashboard() {
 
         {activeTab === 'review' && (
           <div className="pb-20">
-            <div className="flex items-center gap-2 mb-4">
-              <button onClick={() => setActiveTab('home')} className="p-2 -ml-2 rounded-lg hover:bg-muted/50">
-                <ArrowRight className="w-5 h-5 rotate-180" />
+            <div className="mb-4 flex items-center gap-2">
+              <button onClick={() => setActiveTab('home')} className="-ml-2 rounded-lg p-2 hover:bg-muted/50">
+                <ArrowRight className="h-5 w-5 rotate-180" />
               </button>
-              <h2 className="font-semibold text-lg">评审工作区</h2>
+              <h2 className="text-lg font-semibold">评审工作区</h2>
             </div>
-            <ReviewWorkspace project={mockProject} onShowReasoning={handleShowReasoning} />
+
+            <ReviewWorkspace
+              project={appState.project}
+              reviewItems={appState.reviewItems}
+              chatMessages={chatMessages}
+              chatConfig={appState.chatConfig}
+              isChatPending={isChatPending}
+              savingItemId={savingItemId}
+              generatingItemId={generatingItemId}
+              activeReviewItem={activeReviewItem}
+              onShowReasoning={handleShowReasoning}
+              onActiveReviewItemChange={setActiveReviewItemId}
+              onSendChat={onSendChat}
+              onSaveReviewItem={onSaveReviewItem}
+              onGenerateComment={onGenerateComment}
+            />
           </div>
         )}
       </main>
@@ -384,6 +502,7 @@ function MobileDashboard() {
 
       <MobileOntologyDrawer
         isOpen={isOntologyDrawerOpen}
+        ontology={appState.ontology}
         onClose={() => {
           setIsOntologyDrawerOpen(false);
           if (activeTab === 'ontology') {
@@ -396,6 +515,8 @@ function MobileDashboard() {
         isOpen={isReasoningModalOpen}
         onClose={() => setIsReasoningModalOpen(false)}
         reviewItem={selectedReviewItem}
+        reasoning={selectedReasoning}
+        isLoading={reasoningLoadingItemId === selectedReviewItem?.id}
       />
 
       <MobileChatModal
@@ -406,26 +527,106 @@ function MobileDashboard() {
             setActiveTab('home');
           }
         }}
+        messages={chatMessages}
+        quickActions={appState.chatConfig.quickActions}
+        isPending={isChatPending}
+        activeReviewItem={activeReviewItem}
+        onSendMessage={(message) => onSendChat(message, activeReviewItem?.id)}
       />
     </div>
   );
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const isMobile = useIsMobile();
+  const {
+    session,
+    appState,
+    chatMessages,
+    reasoningByItem,
+    isAuthenticating,
+    isLoadingAppState,
+    isChatPending,
+    savingItemId,
+    generatingItemId,
+    reasoningLoadingItemId,
+    errorMessage,
+    reloadAppState,
+    login,
+    ensureReasoning,
+    saveReviewItem,
+    generateReviewComment,
+    sendChat
+  } = useReviewApp();
+
+  if (!session) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div key="login" exit={{ opacity: 0, scale: 1.05 }} transition={{ duration: 0.3 }}>
+          <LoginPage isLoading={isAuthenticating} errorMessage={errorMessage} onLogin={login} />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  if (!appState) {
+    return (
+      <div>
+        <LoadingPage title="正在连接评审服务" message="正在拉取项目、评审项和模拟知识库数据..." />
+        {!isLoadingAppState && errorMessage && (
+          <div className="fixed inset-x-0 bottom-6 flex justify-center px-4">
+            <div className="w-full max-w-md rounded-xl border border-amber-500/30 bg-background p-4 shadow-lg">
+              <p className="text-sm text-amber-700">{errorMessage}</p>
+              <Button
+                className="mt-3 w-full"
+                onClick={() => {
+                  void reloadAppState().catch(() => undefined);
+                }}
+              >
+                重试加载
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <AnimatePresence mode="wait">
-      {!isLoggedIn ? (
-        <motion.div key="login" exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.5 }}>
-          <LoginPage onLogin={() => setIsLoggedIn(true)} />
-        </motion.div>
-      ) : (
-        <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-          {isMobile ? <MobileDashboard /> : <DesktopDashboard />}
-        </motion.div>
-      )}
+      <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
+        {isMobile ? (
+          <MobileDashboard
+            appState={appState}
+            chatMessages={chatMessages}
+            reasoningByItem={reasoningByItem}
+            isChatPending={isChatPending}
+            savingItemId={savingItemId}
+            generatingItemId={generatingItemId}
+            reasoningLoadingItemId={reasoningLoadingItemId}
+            errorMessage={errorMessage}
+            onEnsureReasoning={ensureReasoning}
+            onSendChat={sendChat}
+            onSaveReviewItem={saveReviewItem}
+            onGenerateComment={generateReviewComment}
+          />
+        ) : (
+          <DesktopDashboard
+            appState={appState}
+            chatMessages={chatMessages}
+            reasoningByItem={reasoningByItem}
+            isChatPending={isChatPending}
+            savingItemId={savingItemId}
+            generatingItemId={generatingItemId}
+            reasoningLoadingItemId={reasoningLoadingItemId}
+            errorMessage={errorMessage}
+            onEnsureReasoning={ensureReasoning}
+            onSendChat={sendChat}
+            onSaveReviewItem={saveReviewItem}
+            onGenerateComment={generateReviewComment}
+          />
+        )}
+      </motion.div>
     </AnimatePresence>
   );
 }
