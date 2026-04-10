@@ -4,8 +4,10 @@ import type {
   AppStatePayload,
   AuthSession,
   ChatMessage,
+  KnowledgeDocument,
   ReasoningData,
   ReviewActivity,
+  ReviewHistoryEntry,
   ReviewItem,
   SystemStatus
 } from '@/types';
@@ -14,12 +16,13 @@ type LoadedAppState = Omit<AppStatePayload, 'systemStatus'> & {
   systemStatus: SystemStatus;
 };
 
-function createAssistantMessage(content: string): ChatMessage {
+function createAssistantMessage(content: string, relatedDocuments: KnowledgeDocument[] = []): ChatMessage {
   return {
     id: `assistant-${Date.now()}`,
     role: 'assistant',
     content,
-    timestamp: new Date()
+    timestamp: new Date(),
+    relatedDocuments
   };
 }
 
@@ -47,17 +50,37 @@ function buildActivity(action: string, target: string, type: ReviewActivity['typ
   };
 }
 
+function buildReviewActivity(reviewItem: ReviewItem): ReviewActivity {
+  switch (reviewItem.status) {
+    case 'reviewed':
+      return buildActivity('提交评审', reviewItem.title, 'success');
+    case 'disputed':
+      return buildActivity('标记争议', reviewItem.title, 'warning');
+    case 'needs_revision':
+      return buildActivity('要求补材料', reviewItem.title, 'warning');
+    case 'in_review':
+      return buildActivity('转入复核', reviewItem.title, 'info');
+    case 'draft':
+      return buildActivity('保存草稿', reviewItem.title, 'info');
+    default:
+      return buildActivity('更新评审项', reviewItem.title, 'info');
+  }
+}
+
 export function useReviewApp() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [appState, setAppState] = useState<LoadedAppState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [reasoningByItem, setReasoningByItem] = useState<Record<string, ReasoningData>>({});
+  const [historyByItem, setHistoryByItem] = useState<Record<string, ReviewHistoryEntry[]>>({});
+  const [generatedReferencesByItem, setGeneratedReferencesByItem] = useState<Record<string, KnowledgeDocument[]>>({});
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isLoadingAppState, setIsLoadingAppState] = useState(false);
   const [isChatPending, setIsChatPending] = useState(false);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
   const [reasoningLoadingItemId, setReasoningLoadingItemId] = useState<string | null>(null);
+  const [historyLoadingItemId, setHistoryLoadingItemId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadAppState = async () => {
@@ -92,6 +115,8 @@ export function useReviewApp() {
     setErrorMessage(null);
     setChatMessages([]);
     setReasoningByItem({});
+    setHistoryByItem({});
+    setGeneratedReferencesByItem({});
 
     try {
       const nextSession = await api.login(username, password);
@@ -135,6 +160,29 @@ export function useReviewApp() {
     }
   };
 
+  const ensureReviewHistory = async (itemId: string) => {
+    if (historyByItem[itemId]) {
+      return historyByItem[itemId];
+    }
+
+    setHistoryLoadingItemId(itemId);
+    setErrorMessage(null);
+
+    try {
+      const response = await api.getReviewHistory(itemId);
+      setHistoryByItem((current) => ({
+        ...current,
+        [itemId]: response.entries
+      }));
+      return response.entries;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '加载评审历史失败。');
+      throw error;
+    } finally {
+      setHistoryLoadingItemId(null);
+    }
+  };
+
   const updateLocalReviewItem = (nextItem: ReviewItem, activity: ReviewActivity) => {
     setAppState((current) =>
       current
@@ -153,10 +201,14 @@ export function useReviewApp() {
 
     try {
       const response = await api.updateReviewItem(itemId, { score, comment, status });
-      updateLocalReviewItem(
-        response.item,
-        buildActivity(status === 'reviewed' ? '提交' : '暂存', response.item.title, status === 'disputed' ? 'warning' : 'success')
-      );
+      updateLocalReviewItem(response.item, buildReviewActivity(response.item));
+      const historyEntry = response.historyEntry;
+      if (historyEntry) {
+        setHistoryByItem((current) => ({
+          ...current,
+          [itemId]: [historyEntry, ...(current[itemId] ?? [])].slice(0, 20)
+        }));
+      }
       return response.item;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '保存评审项失败。');
@@ -197,6 +249,10 @@ export function useReviewApp() {
             }
           : current
       );
+      setGeneratedReferencesByItem((current) => ({
+        ...current,
+        [item.id]: completion.relatedDocuments ?? []
+      }));
 
       return completion.text;
     } catch (error) {
@@ -230,7 +286,8 @@ export function useReviewApp() {
         ...current,
         {
           ...response.message,
-          timestamp: new Date(response.message.timestamp)
+          timestamp: new Date(response.message.timestamp),
+          relatedDocuments: response.relatedDocuments ?? []
         }
       ]);
     } catch (error) {
@@ -246,16 +303,20 @@ export function useReviewApp() {
     appState,
     chatMessages,
     reasoningByItem,
+    historyByItem,
+    generatedReferencesByItem,
     isAuthenticating,
     isLoadingAppState,
     isChatPending,
     savingItemId,
     generatingItemId,
     reasoningLoadingItemId,
+    historyLoadingItemId,
     errorMessage,
     reloadAppState: loadAppState,
     login,
     ensureReasoning,
+    ensureReviewHistory,
     saveReviewItem,
     generateReviewComment,
     sendChat

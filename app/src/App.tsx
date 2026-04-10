@@ -23,29 +23,14 @@ import { ReasoningPanel } from '@/components/panels/ReasoningPanel';
 import { ReviewWorkspace } from '@/components/panels/ReviewWorkspace';
 import { useReviewApp } from '@/hooks/useReviewApp';
 import { useIsMobile } from '@/hooks/useMediaQuery';
+import { buildReviewStats } from '@/lib/review';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import type { ReviewItem, ReviewStage, ReviewStats, UserRole } from '@/types';
+import type { ReviewItem, ReviewStage, UserRole } from '@/types';
 import './App.css';
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
-
-function buildReviewStats(reviewItems: ReviewItem[]): ReviewStats {
-  const completed = reviewItems.filter((item) => item.status === 'reviewed').length;
-  const pending = reviewItems.filter((item) => item.status === 'pending').length;
-  const disputed = reviewItems.filter((item) => item.status === 'disputed').length;
-  const avgConfidence =
-    reviewItems.length === 0 ? 0 : reviewItems.reduce((sum, item) => sum + item.confidence, 0) / reviewItems.length;
-
-  return {
-    total: reviewItems.length,
-    completed,
-    pending,
-    disputed,
-    avgConfidence
-  };
-}
 
 function LoginPage({
   isLoading,
@@ -256,12 +241,16 @@ function DesktopDashboard({
   appState,
   chatMessages,
   reasoningByItem,
+  historyByItem,
+  generatedReferencesByItem,
   isChatPending,
   savingItemId,
   generatingItemId,
   reasoningLoadingItemId,
+  historyLoadingItemId,
   errorMessage,
   onEnsureReasoning,
+  onEnsureReviewHistory,
   onSendChat,
   onSaveReviewItem,
   onGenerateComment
@@ -269,12 +258,16 @@ function DesktopDashboard({
   appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
   chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
   reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
+  historyByItem: ReturnType<typeof useReviewApp>['historyByItem'];
+  generatedReferencesByItem: ReturnType<typeof useReviewApp>['generatedReferencesByItem'];
   isChatPending: boolean;
   savingItemId: string | null;
   generatingItemId: string | null;
   reasoningLoadingItemId: string | null;
+  historyLoadingItemId: string | null;
   errorMessage: string | null;
   onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
+  onEnsureReviewHistory: (itemId: string) => Promise<unknown>;
   onSendChat: (message: string, itemId?: string) => void;
   onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
   onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
@@ -331,7 +324,7 @@ function DesktopDashboard({
           </motion.button>
         )}
 
-        <div className="flex-1 overflow-hidden px-4 py-4">
+        <div className="min-w-0 flex-1 overflow-hidden px-4 py-4">
           {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
 
           <ReviewWorkspace
@@ -339,11 +332,16 @@ function DesktopDashboard({
             reviewItems={appState.reviewItems}
             chatMessages={chatMessages}
             chatConfig={appState.chatConfig}
+            reviewHistoryByItem={historyByItem}
+            generatedReferencesByItem={generatedReferencesByItem}
             isChatPending={isChatPending}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
+            historyLoadingItemId={historyLoadingItemId}
             activeReviewItem={activeReviewItem}
+            isReasoningVisible={Boolean(selectedReviewItem)}
             onShowReasoning={handleShowReasoning}
+            onLoadHistory={onEnsureReviewHistory}
             onActiveReviewItemChange={setActiveReviewItemId}
             onSendChat={onSendChat}
             onSaveReviewItem={onSaveReviewItem}
@@ -378,12 +376,16 @@ function MobileDashboard({
   appState,
   chatMessages,
   reasoningByItem,
+  historyByItem,
+  generatedReferencesByItem,
   isChatPending,
   savingItemId,
   generatingItemId,
   reasoningLoadingItemId,
+  historyLoadingItemId,
   errorMessage,
   onEnsureReasoning,
+  onEnsureReviewHistory,
   onSendChat,
   onSaveReviewItem,
   onGenerateComment
@@ -391,12 +393,16 @@ function MobileDashboard({
   appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
   chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
   reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
+  historyByItem: ReturnType<typeof useReviewApp>['historyByItem'];
+  generatedReferencesByItem: ReturnType<typeof useReviewApp>['generatedReferencesByItem'];
   isChatPending: boolean;
   savingItemId: string | null;
   generatingItemId: string | null;
   reasoningLoadingItemId: string | null;
+  historyLoadingItemId: string | null;
   errorMessage: string | null;
   onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
+  onEnsureReviewHistory: (itemId: string) => Promise<unknown>;
   onSendChat: (message: string, itemId?: string) => void;
   onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
   onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
@@ -484,11 +490,15 @@ function MobileDashboard({
               reviewItems={appState.reviewItems}
               chatMessages={chatMessages}
               chatConfig={appState.chatConfig}
+              reviewHistoryByItem={historyByItem}
+              generatedReferencesByItem={generatedReferencesByItem}
               isChatPending={isChatPending}
               savingItemId={savingItemId}
               generatingItemId={generatingItemId}
+              historyLoadingItemId={historyLoadingItemId}
               activeReviewItem={activeReviewItem}
               onShowReasoning={handleShowReasoning}
+              onLoadHistory={onEnsureReviewHistory}
               onActiveReviewItemChange={setActiveReviewItemId}
               onSendChat={onSendChat}
               onSaveReviewItem={onSaveReviewItem}
@@ -544,16 +554,20 @@ function App() {
     appState,
     chatMessages,
     reasoningByItem,
+    historyByItem,
+    generatedReferencesByItem,
     isAuthenticating,
     isLoadingAppState,
     isChatPending,
     savingItemId,
     generatingItemId,
     reasoningLoadingItemId,
+    historyLoadingItemId,
     errorMessage,
     reloadAppState,
     login,
     ensureReasoning,
+    ensureReviewHistory,
     saveReviewItem,
     generateReviewComment,
     sendChat
@@ -600,12 +614,16 @@ function App() {
             appState={appState}
             chatMessages={chatMessages}
             reasoningByItem={reasoningByItem}
+            historyByItem={historyByItem}
+            generatedReferencesByItem={generatedReferencesByItem}
             isChatPending={isChatPending}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
             reasoningLoadingItemId={reasoningLoadingItemId}
+            historyLoadingItemId={historyLoadingItemId}
             errorMessage={errorMessage}
             onEnsureReasoning={ensureReasoning}
+            onEnsureReviewHistory={ensureReviewHistory}
             onSendChat={sendChat}
             onSaveReviewItem={saveReviewItem}
             onGenerateComment={generateReviewComment}
@@ -615,12 +633,16 @@ function App() {
             appState={appState}
             chatMessages={chatMessages}
             reasoningByItem={reasoningByItem}
+            historyByItem={historyByItem}
+            generatedReferencesByItem={generatedReferencesByItem}
             isChatPending={isChatPending}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
             reasoningLoadingItemId={reasoningLoadingItemId}
+            historyLoadingItemId={historyLoadingItemId}
             errorMessage={errorMessage}
             onEnsureReasoning={ensureReasoning}
+            onEnsureReviewHistory={ensureReviewHistory}
             onSendChat={sendChat}
             onSaveReviewItem={saveReviewItem}
             onGenerateComment={generateReviewComment}

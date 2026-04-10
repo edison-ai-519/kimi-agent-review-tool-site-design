@@ -1,303 +1,267 @@
 # Kimi Agent Review Tool Site Design
 
-一个面向科研项目评审场景的 Web 演示项目，当前已经从“纯前端界面原型”升级为“前端 + 最小后端联调版”。
+一个面向科研项目评审场景的 Web 演示项目。当前版本已经从“纯前端原型”演进为“前端 + 最小后端联调版”，可用于演示评审工作台、本体导航、推理依据、聊天助手，以及移动端视图。
 
-项目保留了评审工作台、本体导航、推理依据、聊天助手、移动端视图等交互界面，同时补充了：
+## 当前能力
 
-- 最小后端 API
-- 假知识库 JSON 数据
-- 统一 AI 接口层
-- 可替换的知识库 provider
-- 可替换的 LLM provider
+- 评审工作区：支持展开评审项、评分、填写意见、保存、提交、标记争议。
+- 本体导航：支持本体树浏览、搜索、高亮路径、情境联合向量和最近激活概念展示。
+- 推理依据面板：可查看评审项的推理链、结论摘要、依据文档和本体路径。
+- 聊天助手：统一走后端 AI 接口，并展示关联知识库资料。
+- 辅助意见生成：支持基于当前评审项上下文和知识库材料生成评审建议，并展示本次引用资料。
+- 评审筛选能力：支持搜索、状态筛选、排序和单项历史记录查看。
+- 运行态持久化：评审项修改、活动流和历史记录会写入本地运行态文件，服务重启后保留。
 
-当前版本适合用于：
+## 当前状态
+
+这个项目目前适合：
 
 - 前后端联调
-- 演示评审流程
-- 后续接入真实知识库和真实模型前的接口预演
+- 产品演示
+- 接入真实知识库和模型前的接口预演
 
-## Current Status
+它还不是完整生产系统，仍有这些限制：
 
-当前项目不是最终生产系统，现状如下：
+- 登录仍然是演示模式，没有正式账号体系和权限控制。
+- 持久化目前基于本地 JSON 运行态文件，不是数据库。
+- AI 与知识库默认仍使用 mock provider。
+- 没有接入正式 RAG、向量检索、审计系统或自动化测试。
+- 构建通过，但当前前端仍有较大的打包体积告警。
 
-- 前端页面已经接到真实后端接口，不再只是本地 `setTimeout` mock
-- 知识库目前使用本地假 JSON 文档，不是正式知识库
-- AI 能力目前走统一接口，但默认使用 mock provider，不调用真实模型
-- 评审项保存和提交目前写在服务进程内存中，重启服务后会恢复到初始种子数据
-- 没有接入 RAG、向量库、数据库或正式鉴权系统
+## 已实现功能
 
-## Implemented Features
+### 前端
 
-当前已经具备这些功能：
+- 桌面端和移动端评审工作区
+- 评审要点展开编辑
+- 评审状态扩展：`draft`、`pending`、`in_review`、`needs_revision`、`reviewed`、`disputed`
+- 搜索、筛选、排序
+- 推理依据侧栏
+- 聊天助手引用资料卡片
+- 辅助意见生成引用资料卡片
+- 单项评审历史记录
 
-- 登录页与桌面端 / 移动端评审工作台
-- 评审项列表加载、展开、评分、填写意见、暂存、提交
-- 本体树、本体路径高亮、上下文向量、激活概念展示
-- 推理依据面板加载指定评审项的推理链
-- 推理面板中的文档依据，支持由知识库检索结果生成
-- 聊天助手统一走 AI 接口，并附带知识库检索结果
-- “生成辅助意见”统一走 AI 接口，并附带当前评审项上下文与知识库材料
-- 知识库 provider 与 LLM provider 的运行时切换
+### 后端
 
-## Tech Stack
+- 最小 HTTP API 服务
+- 项目状态、知识库、推理依据、聊天、AI 补全接口
+- 评审项更新接口
+- 评审历史接口
+- 本地运行态持久化
+- 可替换的 Knowledge Base Provider / LLM Provider
 
-- Frontend: React 19, TypeScript, Vite, Tailwind CSS, shadcn/ui, Framer Motion
-- Backend: Node.js built-in HTTP server
-- Data: local JSON seed files
-- Integration pattern: pluggable provider architecture
+## 技术栈
 
-## Project Structure
+- 前端：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui、Framer Motion
+- 后端：Node.js 内置 HTTP Server
+- 数据：本地 JSON 种子文件 + 本地运行态 JSON
+- 架构：可替换 provider 的集成模式
+
+## 项目结构
 
 ```text
 .
 |-- README.md
 |-- .gitignore
 `-- app/
+    |-- README.md
+    |-- package.json
     |-- server/
     |   |-- data/
     |   |   |-- app-state.json
     |   |   |-- knowledge-base.json
-    |   |   `-- reasoning-map.json
+    |   |   |-- reasoning-map.json
+    |   |   `-- runtime-state.json        # 运行后生成，已加入忽略
     |   |-- docs/
     |   |   `-- integration-contracts.md
     |   |-- services/
     |   |   |-- knowledge-base/
-    |   |   |   |-- index.mjs
-    |   |   |   `-- providers/
     |   |   `-- llm/
-    |   |       |-- index.mjs
-    |   |       `-- providers/
     |   |-- dev.mjs
-    |   `-- index.mjs
+    |   |-- index.mjs
+    |   `-- state-store.mjs
     |-- src/
     |   |-- components/
     |   |-- hooks/
     |   |-- lib/
     |   `-- types/
-    |-- package.json
     `-- vite.config.ts
 ```
 
-## Run Locally
+## 本地运行
 
-### 1. Install dependencies
+### 1. 安装依赖
 
 ```bash
 cd app
 npm install
 ```
 
-### 2. Start frontend + backend together
+### 2. 同时启动前后端
 
 ```bash
 npm run dev
 ```
 
-默认会启动：
+默认地址：
 
-- Frontend: `http://127.0.0.1:5173/`
-- Backend: `http://127.0.0.1:8787/`
+- 前端：[http://127.0.0.1:5173](http://127.0.0.1:5173)
+- 后端：[http://127.0.0.1:8787](http://127.0.0.1:8787)
+- 健康检查：[http://127.0.0.1:8787/health](http://127.0.0.1:8787/health)
 
-### 3. Build
+### 3. 分别启动
+
+```bash
+# 前端
+npm run dev:client -- --host 127.0.0.1 --port 5173
+
+# 后端
+npm run start:server
+```
+
+### 4. 构建
 
 ```bash
 npm run build
 ```
 
-### 4. Preview frontend build
+### 5. 代码检查
 
 ```bash
-npm run preview
+npm run lint
 ```
 
-### 5. Start backend only
-
-```bash
-npm run start:server
-```
-
-## Available Scripts
+## 可用脚本
 
 在 `app/` 目录下可用：
 
-- `npm run dev`: 同时启动前端和后端
-- `npm run dev:client`: 仅启动 Vite 前端
-- `npm run dev:server`: 仅启动后端开发服务
-- `npm run start:server`: 启动后端服务
-- `npm run build`: TypeScript 检查并构建前端产物
-- `npm run lint`: 运行 ESLint
-- `npm run preview`: 预览前端构建产物
+- `npm run dev`：同时启动前端和后端
+- `npm run dev:client`：启动前端开发服务器
+- `npm run dev:server`：以 watch 模式启动后端
+- `npm run start:server`：启动后端服务
+- `npm run build`：构建前端并执行 TypeScript 检查
+- `npm run lint`：运行 ESLint
+- `npm run preview`：预览前端构建产物
 
-## API Overview
-
-当前后端提供以下接口：
+## API 概览
 
 - `GET /health`
-  用于健康检查，同时返回当前启用的知识库 provider 和 LLM provider
+  返回后端健康状态和当前启用的 provider 信息。
 
 - `POST /api/auth/login`
-  模拟登录接口
+  演示登录接口。
 
 - `GET /api/app-state`
-  返回项目、评审项、本体、动态、聊天配置、知识库基础信息
+  返回项目、评审项、本体、活动流、聊天配置和知识库基础信息。
 
 - `GET /api/knowledge-base`
-  返回当前知识库元数据和文档列表
+  返回当前知识库元数据和文档列表。
 
 - `POST /api/knowledge-base/search`
-  按 `query`、`itemId`、本体路径等上下文搜索知识库
+  基于 `query`、`itemId` 和本体路径搜索知识库。
 
 - `GET /api/review-items/:id/reasoning`
-  返回评审项的推理链和依据文档
+  返回对应评审项的推理链和依据文档。
+
+- `GET /api/review-items/:id/history`
+  返回对应评审项的历史记录。
 
 - `PATCH /api/review-items/:id`
-  暂存或提交评审项
+  更新评审项的评分、意见和状态，并写入活动流与历史记录。
 
 - `POST /api/chat`
-  聊天接口，内部会先走知识库检索，再走 AI 接口
+  聊天接口，内部会先检索知识库，再调用 AI provider。
 
 - `POST /api/llm/complete`
-  通用 AI 接口，支持 `prompt`、`itemId`、`useCase`、`context`
+  通用 AI 补全接口，支持 `prompt`、`itemId`、`useCase` 和 `context`。
 
-## Knowledge Base and AI Architecture
+## 持久化说明
 
-项目已经拆出了两层可替换集成：
+运行态数据会写入：
 
-### 1. Knowledge Base Provider
+- `app/server/data/runtime-state.json`
 
-当前内置两个 provider：
+这个文件用于保存：
+
+- 评审项最新状态
+- 活动流
+- 单项评审历史
+
+它已经加入 `.gitignore`，不会进入版本库。
+
+如果你想重置到初始演示数据，可以删除这个文件后重新启动后端。
+
+## Provider 机制
+
+### Knowledge Base Provider
+
+当前内置：
 
 - `mock-json`
-  默认 provider，从本地假 JSON 文档读取并做简单检索
-
 - `http-template`
-  真实知识库接入模板 provider，后续可以通过外部 HTTP 服务接入正式知识库
 
-运行时切换：
+切换方式：
 
 ```bash
 KNOWLEDGE_BASE_PROVIDER=mock-json
 KNOWLEDGE_BASE_PROVIDER=http-template
 ```
 
-`http-template` 可读取这些环境变量：
+`http-template` 可读取环境变量：
 
 - `KNOWLEDGE_BASE_ENDPOINT`
 - `KNOWLEDGE_BASE_API_KEY`
 - `KNOWLEDGE_BASE_NAMESPACE`
 
-### 2. LLM Provider
+### LLM Provider
 
-当前内置两个 provider：
+当前内置：
 
 - `mock`
-  默认 provider，返回模拟模型结果
-
 - `http-template`
-  真实模型服务接入模板 provider，后续可以通过外部 HTTP 服务接入正式模型
 
-运行时切换：
+切换方式：
 
 ```bash
 LLM_PROVIDER=mock
 LLM_PROVIDER=http-template
 ```
 
-`http-template` 可读取这些环境变量：
+`http-template` 可读取环境变量：
 
 - `LLM_ENDPOINT`
 - `LLM_API_KEY`
 - `LLM_MODEL`
 
-## Fake Knowledge Base
-
-当前知识库文件位于：
-
-- `app/server/data/knowledge-base.json`
-
-它只是联调用的假文档，方便现在先完成：
-
-- 评审过程中的知识库辅助判断
-- 推理依据面板的文档展示
-- 聊天和辅助意见中的知识库上下文拼装
-
-后续如果你要接真实知识库，有两种方式：
-
-1. 保持现有业务层不变，直接让外部服务适配 `http-template` provider 的 JSON 协议
-2. 新增一个 provider 文件并在注册器中挂载
-
-## Integration Contract
-
-真实知识库服务和真实模型服务的接入协议说明已经单独写在：
-
-- `app/server/docs/integration-contracts.md`
-
-这个文档定义了：
-
-- 知识库 provider 请求格式
-- 知识库 provider 响应格式
-- LLM provider 请求格式
-- LLM provider 响应格式
-
-如果你后面接正式服务，优先按照这个协议来对接即可。
-
-## Key Files
-
-比较关键的文件如下：
+## 关键文件
 
 - `app/src/App.tsx`
-  前端应用入口
+  前端应用入口和桌面/移动端布局切换。
 
 - `app/src/hooks/useReviewApp.ts`
-  前端全局数据流和接口调用入口
+  前端全局状态与接口调用入口。
+
+- `app/src/components/panels/ReviewWorkspace.tsx`
+  评审工作区、筛选排序、历史与助手联动。
 
 - `app/src/lib/api.ts`
-  前端 API 封装
+  前端 API 封装。
+
+- `app/src/lib/review.ts`
+  评审状态、统计、筛选与排序逻辑。
 
 - `app/server/index.mjs`
-  后端入口
+  后端入口。
 
-- `app/server/services/knowledge-base/index.mjs`
-  知识库 provider 注册器
-
-- `app/server/services/llm/index.mjs`
-  LLM provider 注册器
+- `app/server/state-store.mjs`
+  本地运行态持久化逻辑。
 
 - `app/server/data/knowledge-base.json`
-  假知识库数据
+  模拟知识库数据。
 
 - `app/server/docs/integration-contracts.md`
-  真实服务接入协议
+  真实知识库和模型服务接入协议。
 
-## Update Log
-
-### 2026-04-09
-
-- Commit: `fc5388a`
-- Summary: 将项目从纯前端演示原型推进为“前端 + 最小后端联调版”，并完成一轮接口、文档和工程收口
-
-本次更新主要包括：
-
-- 新增最小后端服务，提供登录、应用状态、知识库检索、推理依据、评审保存、聊天和通用 AI 接口
-- 新增假知识库 JSON、评审种子数据、推理映射数据，支撑当前联调和演示
-- 抽离 Knowledge Base Provider / LLM Provider，可在 `mock` 与 `http-template` 之间切换
-- 为后续接入真实知识库和真实模型补齐接口契约文档
-- 前端改为通过统一 API 和 `useReviewApp` hook 读取后端数据，不再依赖本地 `setTimeout` mock
-- 聊天和“生成辅助意见”统一走预留 AI 接口，并能附带当前评审项上下文
-- 增加后端参数校验，补齐知识库返回类型，修复项目自身的 ESLint 问题
-- 整理 `.gitignore`、README 和运行说明，便于后续继续开发和交接
-
-## Current Limitations
-
-当前版本仍有这些限制：
-
-- 没有接数据库，评审写回是内存态
-- 没有接真实知识库
-- 没有接真实 LLM
-- 没有做 RAG 或向量检索
-- 没有正式用户体系和权限控制
-- 部分返回内容仍为演示数据，不代表真实评审逻辑
-
-## Repository
+## 仓库地址
 
 - GitHub: [https://github.com/edison-ai-519/kimi-agent-review-tool-site-design](https://github.com/edison-ai-519/kimi-agent-review-tool-site-design)

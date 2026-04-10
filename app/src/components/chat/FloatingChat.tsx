@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bot, Check, Copy, Maximize2, Minimize2, Send, Sparkles, User, X } from 'lucide-react';
+import { RelatedDocumentsList } from '@/components/chat/RelatedDocumentsList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,6 +44,8 @@ function MessageBubble({
         >
           <div className="whitespace-pre-wrap">{message.content}</div>
         </div>
+
+        {!isUser && <RelatedDocumentsList documents={message.relatedDocuments} compact className="bg-background/90" />}
 
         {!isUser && (
           <div className="mt-1 flex items-center gap-1">

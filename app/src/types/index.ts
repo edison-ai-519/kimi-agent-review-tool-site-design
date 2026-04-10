@@ -5,7 +5,7 @@ export type UserRole = 'expert' | 'applicant' | 'admin';
 export type ReviewStage = 'proposal' | 'midterm' | 'final';
 
 // Review item status
-export type ReviewStatus = 'pending' | 'reviewed' | 'disputed';
+export type ReviewStatus = 'draft' | 'pending' | 'in_review' | 'needs_revision' | 'reviewed' | 'disputed';
 
 // Ontology node
 export interface OntologyNode {
@@ -42,6 +42,7 @@ export interface ReviewItem {
   score?: number;
   maxScore: number;
   comment?: string;
+  updatedAt?: string;
   reasoning?: ReasoningChain;
 }
 
@@ -85,6 +86,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   isThinking?: boolean;
+  relatedDocuments?: KnowledgeDocument[];
 }
 
 // Project info
@@ -121,6 +123,19 @@ export interface ReviewStats {
   pending: number;
   disputed: number;
   avgConfidence: number;
+}
+
+export interface ReviewHistoryEntry {
+  id: string;
+  itemId: string;
+  action: string;
+  actorName: string;
+  summary: string;
+  createdAt: string;
+  fromStatus?: ReviewStatus;
+  toStatus?: ReviewStatus;
+  score?: number;
+  commentPreview?: string;
 }
 
 export interface OntologyData {
@@ -192,4 +207,9 @@ export interface AppStatePayload {
   activityFeed: ReviewActivity[];
   knowledgeBase: KnowledgeBase;
   chatConfig: ChatConfig;
+}
+
+export interface ReviewHistoryPayload {
+  itemId: string;
+  entries: ReviewHistoryEntry[];
 }

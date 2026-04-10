@@ -108,7 +108,7 @@ export function MobileHomeView({
               </div>
               <div className="rounded-xl bg-amber-500/10 p-3 text-center">
                 <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
-                <div className="text-xs text-muted-foreground">待评审</div>
+                <div className="text-xs text-muted-foreground">待处理</div>
               </div>
               <div className="rounded-xl bg-rose-500/10 p-3 text-center">
                 <div className="text-2xl font-bold text-rose-600">{stats.disputed}</div>

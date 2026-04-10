@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import { cn, escapeRegExp } from '@/lib/utils';
 import { CheckCircle2, ChevronRight, FileText, GitBranch, Lightbulb, Quote, Target, X } from 'lucide-react';
 import type { ReasoningChain, ReasoningData, ReviewItem } from '@/types';
 
@@ -66,20 +66,38 @@ function DocumentFragment({ fragment }: { fragment: ReasoningChain['documents'][
   const [isExpanded, setIsExpanded] = useState(false);
 
   const renderHighlightedContent = () => {
-    let content = fragment.content;
-    for (const highlight of fragment.highlights) {
-      const regex = new RegExp(`(${highlight})`, 'gi');
-      content = content.replace(regex, '|||$1|||');
+    const seenHighlights = new Set<string>();
+    const normalizedHighlights = fragment.highlights
+      .map((highlight) => highlight.trim())
+      .filter((highlight) => {
+        if (!highlight) {
+          return false;
+        }
+
+        const normalizedHighlight = highlight.toLowerCase();
+        if (seenHighlights.has(normalizedHighlight)) {
+          return false;
+        }
+
+        seenHighlights.add(normalizedHighlight);
+        return true;
+      })
+      .sort((left, right) => right.length - left.length);
+
+    if (normalizedHighlights.length === 0) {
+      return fragment.content;
     }
 
-    return content.split('|||').map((part, index) => {
-      const isHighlight = fragment.highlights.some((highlight) => highlight.toLowerCase() === part.toLowerCase());
+    const highlightMatcher = new RegExp(`(${normalizedHighlights.map(escapeRegExp).join('|')})`, 'gi');
+
+    return fragment.content.split(highlightMatcher).filter(Boolean).map((part, index) => {
+      const isHighlight = normalizedHighlights.some((highlight) => highlight.toLowerCase() === part.toLowerCase());
       return isHighlight ? (
-        <mark key={index} className="rounded bg-amber-200 px-0.5 dark:bg-amber-900/50">
+        <mark key={`${fragment.id}-${index}`} className="rounded bg-amber-200 px-0.5 dark:bg-amber-900/50">
           {part}
         </mark>
       ) : (
-        <span key={index}>{part}</span>
+        <span key={`${fragment.id}-${index}`}>{part}</span>
       );
     });
   };

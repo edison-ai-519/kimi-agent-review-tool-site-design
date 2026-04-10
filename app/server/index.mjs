@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createStateStore } from './state-store.mjs';
 import { createKnowledgeBaseClient, listKnowledgeBaseProviders } from './services/knowledge-base/index.mjs';
 import { createLlmClient, listLlmProviders } from './services/llm/index.mjs';
 
@@ -16,13 +17,19 @@ const knowledgeBaseClient = createKnowledgeBaseClient({
   knowledgeBase: readJson('knowledge-base.json')
 });
 const llmClient = createLlmClient();
-
-let reviewItems = clone(appStateSeed.reviewItems);
-let activityFeed = clone(appStateSeed.activityFeed);
+const stateStore = createStateStore({ dataDir, appStateSeed });
 
 const HOST = process.env.API_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.API_PORT ?? 8787);
-const REVIEW_STATUSES = ['pending', 'reviewed', 'disputed'];
+const REVIEW_STATUSES = ['draft', 'pending', 'in_review', 'needs_revision', 'reviewed', 'disputed'];
+const REVIEW_STATUS_LABELS = {
+  draft: '草稿',
+  pending: '待评审',
+  in_review: '复核中',
+  needs_revision: '待补材料',
+  reviewed: '已评审',
+  disputed: '有争议'
+};
 
 class HttpError extends Error {
   constructor(statusCode, message) {
@@ -43,6 +50,18 @@ function clone(value) {
 
 function isReviewStatus(value) {
   return REVIEW_STATUSES.includes(value);
+}
+
+function getReviewItems() {
+  return stateStore.getReviewItems();
+}
+
+function getActivityFeed() {
+  return stateStore.getActivityFeed();
+}
+
+function getReviewItemById(itemId) {
+  return getReviewItems().find((item) => item.id === itemId) ?? null;
 }
 
 function getReviewItemOrThrow(itemId) {
@@ -140,28 +159,30 @@ function sendNoContent(res) {
   res.end();
 }
 
-function getReviewItemById(itemId) {
-  return reviewItems.find((item) => item.id === itemId) ?? null;
+function getLastUpdateIsoString() {
+  const activityFeed = getActivityFeed();
+  return activityFeed[0]?.createdAt ?? appStateSeed.systemStatus.lastUpdate;
 }
 
-function addActivity(action, target, type) {
-  activityFeed = [
-    {
-      id: `activity-${randomUUID()}`,
-      action,
-      target,
-      type,
-      createdAt: new Date().toISOString()
-    },
-    ...activityFeed
-  ].slice(0, 8);
+function buildActivity(action, target, type) {
+  return {
+    id: `activity-${randomUUID()}`,
+    action,
+    target,
+    type,
+    createdAt: new Date().toISOString()
+  };
 }
 
 function getAppStatePayload() {
   return {
     ...clone(appStateSeed),
-    reviewItems: clone(reviewItems),
-    activityFeed: clone(activityFeed),
+    systemStatus: {
+      ...clone(appStateSeed.systemStatus),
+      lastUpdate: getLastUpdateIsoString()
+    },
+    reviewItems: getReviewItems(),
+    activityFeed: getActivityFeed(),
     knowledgeBase: knowledgeBaseClient.getKnowledgeBase()
   };
 }
@@ -197,6 +218,11 @@ function getRouteMatch(pathname) {
   const reasoningMatch = pathname.match(/^\/api\/review-items\/([^/]+)\/reasoning$/);
   if (reasoningMatch) {
     return { type: 'reasoning', itemId: reasoningMatch[1] };
+  }
+
+  const historyMatch = pathname.match(/^\/api\/review-items\/([^/]+)\/history$/);
+  if (historyMatch) {
+    return { type: 'review-history', itemId: historyMatch[1] };
   }
 
   const reviewItemMatch = pathname.match(/^\/api\/review-items\/([^/]+)$/);
@@ -275,23 +301,72 @@ async function buildAiResponse({ prompt, itemId, useCase = 'general', context = 
   });
 }
 
-function updateReviewItem(itemId, updates) {
-  let updatedItem = null;
+function getNextConfidence(currentConfidence, nextStatus) {
+  switch (nextStatus) {
+    case 'reviewed':
+      return Math.max(currentConfidence, 0.82);
+    case 'disputed':
+      return Math.max(Math.min(currentConfidence, 0.74), 0.68);
+    case 'in_review':
+      return Math.max(currentConfidence, 0.76);
+    case 'needs_revision':
+      return Math.min(currentConfidence, 0.65);
+    default:
+      return currentConfidence;
+  }
+}
 
-  reviewItems = reviewItems.map((item) => {
-    if (item.id !== itemId) {
-      return item;
-    }
+function buildReviewActivity(item, status) {
+  switch (status) {
+    case 'reviewed':
+      return buildActivity('提交评审', item.title, 'success');
+    case 'disputed':
+      return buildActivity('标记争议', item.title, 'warning');
+    case 'needs_revision':
+      return buildActivity('要求补材料', item.title, 'warning');
+    case 'in_review':
+      return buildActivity('转入复核', item.title, 'info');
+    case 'draft':
+      return buildActivity('保存草稿', item.title, 'info');
+    default:
+      return buildActivity('更新评审项', item.title, 'info');
+  }
+}
 
-    updatedItem = {
-      ...item,
-      ...updates
-    };
+function buildHistorySummary(previousItem, nextItem) {
+  const summaryParts = [];
 
-    return updatedItem;
-  });
+  if (previousItem.status !== nextItem.status) {
+    summaryParts.push(`状态：${REVIEW_STATUS_LABELS[previousItem.status]} -> ${REVIEW_STATUS_LABELS[nextItem.status]}`);
+  } else {
+    summaryParts.push(`状态：${REVIEW_STATUS_LABELS[nextItem.status]}`);
+  }
 
-  return updatedItem;
+  if (typeof nextItem.score === 'number') {
+    summaryParts.push(`评分：${nextItem.score}/${nextItem.maxScore}`);
+  }
+
+  if (nextItem.comment) {
+    const normalizedComment = nextItem.comment.replace(/\s+/g, ' ').trim();
+    summaryParts.push(`意见：${normalizedComment.slice(0, 48)}${normalizedComment.length > 48 ? '...' : ''}`);
+  }
+
+  return summaryParts.join('；');
+}
+
+function buildReviewHistoryEntry(previousItem, nextItem, action) {
+  return {
+    id: `history-${randomUUID()}`,
+    itemId: nextItem.id,
+    action,
+    actorName: '当前用户',
+    summary: buildHistorySummary(previousItem, nextItem),
+    fromStatus: previousItem.status,
+    toStatus: nextItem.status,
+    score: nextItem.score,
+    commentPreview: nextItem.comment ? nextItem.comment.slice(0, 160) : undefined,
+    createdAt: new Date().toISOString()
+  };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -416,6 +491,11 @@ const server = http.createServer(async (req, res) => {
       const useCase = typeof body.useCase === 'string' ? body.useCase : 'general';
       const context = Array.isArray(body.context) ? body.context : [];
 
+      if (!prompt) {
+        sendJson(res, 400, { message: 'prompt 不能为空。' });
+        return;
+      }
+
       const completion = await buildAiResponse({
         prompt,
         itemId,
@@ -437,8 +517,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      addActivity('查看', `${getReviewItemById(routeMatch.itemId)?.title ?? '评审项'}依据`, 'info');
+      stateStore.prependActivity(
+        buildActivity('查看', `${getReviewItemById(routeMatch.itemId)?.title ?? '评审项'}依据`, 'info')
+      );
+
       sendJson(res, 200, reasoning);
+      return;
+    }
+
+    if (routeMatch?.type === 'review-history' && method === 'GET') {
+      getReviewItemOrThrow(routeMatch.itemId);
+
+      sendJson(res, 200, {
+        itemId: routeMatch.itemId,
+        entries: stateStore.getReviewHistory(routeMatch.itemId)
+      });
       return;
     }
 
@@ -446,16 +539,19 @@ const server = http.createServer(async (req, res) => {
       const body = await readRequestBody(req);
       const currentItem = getReviewItemOrThrow(routeMatch.itemId);
       const nextUpdates = parseReviewItemUpdates(currentItem, body);
-      const updatedItem = updateReviewItem(routeMatch.itemId, {
+      const nextItem = {
+        ...currentItem,
         score: nextUpdates.score,
         comment: nextUpdates.comment,
         status: nextUpdates.status,
-        confidence:
-          nextUpdates.status === 'reviewed'
-            ? Math.max(currentItem.confidence, 0.82)
-            : nextUpdates.status === 'disputed'
-              ? Math.max(currentItem.confidence, 0.68)
-              : currentItem.confidence
+        confidence: getNextConfidence(currentItem.confidence, nextUpdates.status),
+        updatedAt: new Date().toISOString()
+      };
+      const activity = buildReviewActivity(nextItem, nextItem.status);
+      const historyEntry = buildReviewHistoryEntry(currentItem, nextItem, activity.action);
+      const updatedItem = stateStore.updateReviewItem(routeMatch.itemId, nextItem, {
+        activity,
+        historyEntry
       });
 
       if (!updatedItem) {
@@ -463,12 +559,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      addActivity(
-        nextUpdates.status === 'reviewed' ? '提交' : '暂存',
-        updatedItem.title,
-        nextUpdates.status === 'disputed' ? 'warning' : 'success'
-      );
-      sendJson(res, 200, { item: clone(updatedItem) });
+      sendJson(res, 200, {
+        item: updatedItem,
+        historyEntry
+      });
       return;
     }
 

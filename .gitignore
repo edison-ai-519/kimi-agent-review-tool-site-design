@@ -13,6 +13,7 @@ app/.env.*.local
 
 # Logs
 app/*.log
+app/server/data/runtime-state.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

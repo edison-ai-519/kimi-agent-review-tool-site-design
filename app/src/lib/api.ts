@@ -5,6 +5,8 @@ import type {
   KnowledgeSearchResult,
   LlmCompletionResult,
   ReasoningData,
+  ReviewHistoryEntry,
+  ReviewHistoryPayload,
   ReviewItem
 } from '@/types';
 
@@ -57,7 +59,7 @@ export function getReasoning(itemId: string) {
 }
 
 export function updateReviewItem(itemId: string, payload: Partial<Pick<ReviewItem, 'score' | 'comment' | 'status'>>) {
-  return request<{ item: ReviewItem }>(`/api/review-items/${itemId}`, {
+  return request<{ item: ReviewItem; historyEntry?: ReviewHistoryEntry }>(`/api/review-items/${itemId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   });
@@ -71,6 +73,10 @@ export function sendChatMessage(message: string, itemId?: string) {
       ...(itemId ? { itemId } : {})
     })
   });
+}
+
+export function getReviewHistory(itemId: string) {
+  return request<ReviewHistoryPayload>(`/api/review-items/${itemId}/history`);
 }
 
 export function searchKnowledgeBase(payload: {
