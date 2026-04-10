@@ -4,6 +4,17 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStateStore } from './state-store.mjs';
+import {
+  REVIEW_STAGE_LABELS,
+  REVIEW_STAGES,
+  buildFallbackReasoningSeed,
+  createStageSeeds,
+  getStageActionLabel,
+  getStageByItemId,
+  getStageItemContext,
+  getStageReviewStatusLabel,
+  isReviewStage
+} from './review-stages.mjs';
 import { createKnowledgeBaseClient, listKnowledgeBaseProviders } from './services/knowledge-base/index.mjs';
 import { createLlmClient, listLlmProviders } from './services/llm/index.mjs';
 
@@ -17,19 +28,16 @@ const knowledgeBaseClient = createKnowledgeBaseClient({
   knowledgeBase: readJson('knowledge-base.json')
 });
 const llmClient = createLlmClient();
-const stateStore = createStateStore({ dataDir, appStateSeed });
+const reviewStageSeeds = createStageSeeds(appStateSeed);
+const stateStore = createStateStore({
+  dataDir,
+  stageSeeds: reviewStageSeeds,
+  defaultStage: appStateSeed.project.stage
+});
 
 const HOST = process.env.API_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.API_PORT ?? 8787);
 const REVIEW_STATUSES = ['draft', 'pending', 'in_review', 'needs_revision', 'reviewed', 'disputed'];
-const REVIEW_STATUS_LABELS = {
-  draft: '草稿',
-  pending: '待评审',
-  in_review: '复核中',
-  needs_revision: '待补材料',
-  reviewed: '已评审',
-  disputed: '有争议'
-};
 
 class HttpError extends Error {
   constructor(statusCode, message) {
@@ -52,25 +60,56 @@ function isReviewStatus(value) {
   return REVIEW_STATUSES.includes(value);
 }
 
-function getReviewItems() {
-  return stateStore.getReviewItems();
+function getCurrentStage() {
+  return stateStore.getCurrentStage();
 }
 
-function getActivityFeed() {
-  return stateStore.getActivityFeed();
+function getReviewItems(stage = getCurrentStage()) {
+  return stateStore.getReviewItems(stage);
 }
 
-function getReviewItemById(itemId) {
-  return getReviewItems().find((item) => item.id === itemId) ?? null;
+function getActivityFeed(stage = getCurrentStage()) {
+  return stateStore.getActivityFeed(stage);
 }
 
-function getReviewItemOrThrow(itemId) {
-  const reviewItem = getReviewItemById(itemId);
-  if (!reviewItem) {
+function getReviewItemState(itemId) {
+  const stage = getStageByItemId(itemId);
+  if (!stage) {
+    return null;
+  }
+
+  const item = getReviewItems(stage).find((reviewItem) => reviewItem.id === itemId) ?? null;
+  return item ? { stage, item } : null;
+}
+
+function getReviewItemStateOrThrow(itemId) {
+  const reviewItemState = getReviewItemState(itemId);
+  if (!reviewItemState) {
     throw new HttpError(404, '未找到评审项。');
   }
 
-  return reviewItem;
+  return reviewItemState;
+}
+
+function parseOptionalReviewStage(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string' || !isReviewStage(value)) {
+    throw new HttpError(400, `stage 必须是 ${REVIEW_STAGES.join(' / ')} 之一。`);
+  }
+
+  return value;
+}
+
+function parseRequiredReviewStage(value) {
+  const stage = parseOptionalReviewStage(value);
+  if (!stage) {
+    throw new HttpError(400, `stage 必须是 ${REVIEW_STAGES.join(' / ')} 之一。`);
+  }
+
+  return stage;
 }
 
 function parseOptionalItemId(value) {
@@ -159,8 +198,8 @@ function sendNoContent(res) {
   res.end();
 }
 
-function getLastUpdateIsoString() {
-  const activityFeed = getActivityFeed();
+function getLastUpdateIsoString(stage = getCurrentStage()) {
+  const activityFeed = getActivityFeed(stage);
   return activityFeed[0]?.createdAt ?? appStateSeed.systemStatus.lastUpdate;
 }
 
@@ -174,16 +213,142 @@ function buildActivity(action, target, type) {
   };
 }
 
-function getAppStatePayload() {
+function getAppStatePayload(stage = getCurrentStage()) {
+  const stageSeed = reviewStageSeeds[stage];
+
   return {
     ...clone(appStateSeed),
+    project: clone(stageSeed.project),
     systemStatus: {
       ...clone(appStateSeed.systemStatus),
-      lastUpdate: getLastUpdateIsoString()
+      lastUpdate: getLastUpdateIsoString(stage)
     },
-    reviewItems: getReviewItems(),
-    activityFeed: getActivityFeed(),
-    knowledgeBase: knowledgeBaseClient.getKnowledgeBase()
+    reviewItems: getReviewItems(stage),
+    activityFeed: getActivityFeed(stage),
+    knowledgeBase: knowledgeBaseClient.getKnowledgeBase(),
+    chatConfig: clone(stageSeed.chatConfig)
+  };
+}
+
+function buildStageCompletionRecommendation(stage, summary) {
+  if (summary.disputed > 0) {
+    return `${REVIEW_STAGE_LABELS[stage]}仍有 ${summary.disputed} 个争议项，建议先组织会审。`;
+  }
+
+  if (summary.needsRevision > 0) {
+    return `${REVIEW_STAGE_LABELS[stage]}仍有 ${summary.needsRevision} 个待补材料项，建议先补齐支撑材料。`;
+  }
+
+  if (summary.pending > 0) {
+    return `${REVIEW_STAGE_LABELS[stage]}仍有 ${summary.pending} 个待处理项，建议继续完成清单。`;
+  }
+
+  if (summary.total > 0 && summary.completed === summary.total) {
+    return `${REVIEW_STAGE_LABELS[stage]}的评审项已全部完成，可以进入下一阶段。`;
+  }
+
+  return `${REVIEW_STAGE_LABELS[stage]}已创建评审上下文，可以开始处理该阶段任务。`;
+}
+
+function buildStageOverview(stage) {
+  const reviewItems = getReviewItems(stage);
+  const total = reviewItems.length;
+  const completed = reviewItems.filter((item) => item.status === 'reviewed').length;
+  const pending = reviewItems.filter((item) => ['draft', 'pending', 'in_review'].includes(item.status)).length;
+  const disputed = reviewItems.filter((item) => item.status === 'disputed').length;
+  const needsRevision = reviewItems.filter((item) => item.status === 'needs_revision').length;
+  const completionPercent = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+  let status = 'not_started';
+  if (total > 0 && completed === total) {
+    status = 'completed';
+  } else if (disputed > 0 || needsRevision > 0) {
+    status = 'blocked';
+  } else if (completed > 0 || pending > 0) {
+    status = 'in_progress';
+  }
+
+  const summary = {
+    stage,
+    label: REVIEW_STAGE_LABELS[stage],
+    status,
+    total,
+    completed,
+    pending,
+    disputed,
+    needsRevision,
+    completionPercent
+  };
+
+  return {
+    ...summary,
+    recommendation: buildStageCompletionRecommendation(stage, summary)
+  };
+}
+
+function getStageBlockingReason(stageOverview) {
+  if (stageOverview.disputed > 0) {
+    return `${stageOverview.label}还有 ${stageOverview.disputed} 个争议项未闭环。`;
+  }
+
+  if (stageOverview.needsRevision > 0) {
+    return `${stageOverview.label}还有 ${stageOverview.needsRevision} 个待补材料项。`;
+  }
+
+  if (stageOverview.pending > 0) {
+    return `${stageOverview.label}还有 ${stageOverview.pending} 个待处理项未完成。`;
+  }
+
+  return `${stageOverview.label}尚未满足进入下一阶段的条件。`;
+}
+
+function buildStageTransitionDecision(fromStage, toStage) {
+  if (fromStage === toStage) {
+    return {
+      allowed: true,
+      message: `当前已处于${REVIEW_STAGE_LABELS[toStage]}。`
+    };
+  }
+
+  const fromIndex = REVIEW_STAGES.indexOf(fromStage);
+  const toIndex = REVIEW_STAGES.indexOf(toStage);
+
+  if (toIndex <= fromIndex) {
+    return {
+      allowed: true,
+      message: `已切换到${REVIEW_STAGE_LABELS[toStage]}。`
+    };
+  }
+
+  for (const prerequisiteStage of REVIEW_STAGES.slice(0, toIndex)) {
+    const stageOverview = buildStageOverview(prerequisiteStage);
+    if (stageOverview.status !== 'completed') {
+      return {
+        allowed: false,
+        message: `当前不能进入${REVIEW_STAGE_LABELS[toStage]}，因为${getStageBlockingReason(stageOverview)}`
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    message: `已切换到${REVIEW_STAGE_LABELS[toStage]}。`
+  };
+}
+
+function buildReviewStageOverviewPayload(currentStage = getCurrentStage()) {
+  return {
+    currentStage,
+    stages: REVIEW_STAGES.map((stage) => {
+      const overview = buildStageOverview(stage);
+      const decision = buildStageTransitionDecision(currentStage, stage);
+
+      return {
+        ...overview,
+        canEnter: decision.allowed,
+        blockedReason: decision.allowed ? undefined : decision.message
+      };
+    })
   };
 }
 
@@ -234,7 +399,7 @@ function getRouteMatch(pathname) {
 }
 
 async function resolveKnowledgeSearch({ query = '', itemId, limit = 3, ontologyPathLabels = [] }) {
-  const reviewItem = itemId ? getReviewItemOrThrow(itemId) : null;
+  const reviewItem = itemId ? getReviewItemStateOrThrow(itemId).item : null;
   return knowledgeBaseClient.search({
     query,
     reviewItem,
@@ -244,15 +409,18 @@ async function resolveKnowledgeSearch({ query = '', itemId, limit = 3, ontologyP
 }
 
 async function buildReasoningPayload(itemId) {
-  const seed = reasoningSeedMap[itemId];
-  const reviewItem = getReviewItemById(itemId);
+  const reviewItemState = getReviewItemState(itemId);
+  if (!reviewItemState) {
+    return null;
+  }
 
-  if (!seed || !reviewItem) {
+  const seed = reasoningSeedMap[itemId] ?? buildFallbackReasoningSeed(itemId, reviewItemState.item);
+  if (!seed) {
     return null;
   }
 
   const knowledgeSearch = await resolveKnowledgeSearch({
-    query: reviewItem.title,
+    query: reviewItemState.item.title,
     itemId,
     limit: 3,
     ontologyPathLabels: seed.ontologyPathLabels
@@ -260,7 +428,7 @@ async function buildReasoningPayload(itemId) {
 
   const knowledgeDocuments = knowledgeSearch.documents.map((document, index) =>
     knowledgeBaseClient.toDocumentFragment(document, {
-      terms: [reviewItem.title, reviewItem.description, seed.ontologyPathLabels],
+      terms: [reviewItemState.item.title, reviewItemState.item.description, seed.ontologyPathLabels],
       relevance: Math.max(0.7, 0.96 - index * 0.08)
     })
   );
@@ -274,9 +442,12 @@ async function buildReasoningPayload(itemId) {
   };
 }
 
-async function buildAiResponse({ prompt, itemId, useCase = 'general', context = [] }) {
-  const reviewItem = itemId ? getReviewItemOrThrow(itemId) : null;
-  const ontologyPathLabels = itemId ? reasoningSeedMap[itemId]?.ontologyPathLabels ?? [] : [];
+async function buildAiResponse({ prompt, itemId, stage, useCase = 'general', context = [] }) {
+  const reviewItemState = itemId ? getReviewItemStateOrThrow(itemId) : null;
+  const resolvedStage = reviewItemState?.stage ?? stage ?? getCurrentStage();
+  const ontologyPathLabels = itemId
+    ? reasoningSeedMap[itemId]?.ontologyPathLabels ?? getStageItemContext(itemId)?.ontologyPathLabels ?? []
+    : [];
   const knowledgeSearch = await resolveKnowledgeSearch({
     query: prompt,
     itemId,
@@ -288,15 +459,18 @@ async function buildAiResponse({ prompt, itemId, useCase = 'general', context = 
     prompt,
     useCase,
     context: [
+      `当前评审阶段：${REVIEW_STAGE_LABELS[resolvedStage]}`,
       ...context,
-      reviewItem ? `评审项：${reviewItem.title}` : null,
-      reviewItem?.description ?? null,
+      reviewItemState ? `评审项：${reviewItemState.item.title}` : null,
+      reviewItemState?.item.description ?? null,
       ontologyPathLabels.length > 0 ? `本体路径：${ontologyPathLabels.join(' -> ')}` : null
     ].filter(Boolean),
     knowledgeDocuments: knowledgeSearch.documents,
     metadata: {
-      reviewItemId: reviewItem?.id,
-      reviewItemTitle: reviewItem?.title
+      stage: resolvedStage,
+      stageLabel: REVIEW_STAGE_LABELS[resolvedStage],
+      reviewItemId: reviewItemState?.item.id,
+      reviewItemTitle: reviewItemState?.item.title
     }
   });
 }
@@ -316,30 +490,21 @@ function getNextConfidence(currentConfidence, nextStatus) {
   }
 }
 
-function buildReviewActivity(item, status) {
-  switch (status) {
-    case 'reviewed':
-      return buildActivity('提交评审', item.title, 'success');
-    case 'disputed':
-      return buildActivity('标记争议', item.title, 'warning');
-    case 'needs_revision':
-      return buildActivity('要求补材料', item.title, 'warning');
-    case 'in_review':
-      return buildActivity('转入复核', item.title, 'info');
-    case 'draft':
-      return buildActivity('保存草稿', item.title, 'info');
-    default:
-      return buildActivity('更新评审项', item.title, 'info');
-  }
+function buildReviewActivity(item, status, stage) {
+  const action = getStageActionLabel(stage, status);
+  const type = status === 'reviewed' ? 'success' : status === 'disputed' || status === 'needs_revision' ? 'warning' : 'info';
+  return buildActivity(action, item.title, type);
 }
 
-function buildHistorySummary(previousItem, nextItem) {
+function buildHistorySummary(previousItem, nextItem, stage) {
   const summaryParts = [];
 
   if (previousItem.status !== nextItem.status) {
-    summaryParts.push(`状态：${REVIEW_STATUS_LABELS[previousItem.status]} -> ${REVIEW_STATUS_LABELS[nextItem.status]}`);
+    summaryParts.push(
+      `状态：${getStageReviewStatusLabel(stage, previousItem.status)} -> ${getStageReviewStatusLabel(stage, nextItem.status)}`
+    );
   } else {
-    summaryParts.push(`状态：${REVIEW_STATUS_LABELS[nextItem.status]}`);
+    summaryParts.push(`状态：${getStageReviewStatusLabel(stage, nextItem.status)}`);
   }
 
   if (typeof nextItem.score === 'number') {
@@ -354,13 +519,13 @@ function buildHistorySummary(previousItem, nextItem) {
   return summaryParts.join('；');
 }
 
-function buildReviewHistoryEntry(previousItem, nextItem, action) {
+function buildReviewHistoryEntry(previousItem, nextItem, action, stage) {
   return {
     id: `history-${randomUUID()}`,
     itemId: nextItem.id,
     action,
     actorName: '当前用户',
-    summary: buildHistorySummary(previousItem, nextItem),
+    summary: buildHistorySummary(previousItem, nextItem, stage),
     fromStatus: previousItem.status,
     toStatus: nextItem.status,
     score: nextItem.score,
@@ -385,6 +550,7 @@ const server = http.createServer(async (req, res) => {
         status: 'ok',
         service: 'kimi-review-api',
         time: new Date().toISOString(),
+        currentStage: getCurrentStage(),
         integrations: {
           knowledgeBaseProvider: knowledgeBaseClient.name,
           llmProvider: llmClient.name,
@@ -423,7 +589,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'GET' && pathname === '/api/app-state') {
-      sendJson(res, 200, getAppStatePayload());
+      const stage = parseOptionalReviewStage(requestUrl.searchParams.get('stage')) ?? getCurrentStage();
+      sendJson(res, 200, getAppStatePayload(stage));
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/review-stage/overview') {
+      sendJson(res, 200, buildReviewStageOverviewPayload());
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/review-stage') {
+      const body = await readRequestBody(req);
+      const stage = parseRequiredReviewStage(body.stage);
+      const currentStage = getCurrentStage();
+      const decision = buildStageTransitionDecision(currentStage, stage);
+
+      if (!decision.allowed) {
+        sendJson(res, 409, { message: decision.message });
+        return;
+      }
+
+      stateStore.setCurrentStage(stage);
+      sendJson(res, 200, { stage, label: REVIEW_STAGE_LABELS[stage], message: decision.message });
       return;
     }
 
@@ -437,8 +625,9 @@ const server = http.createServer(async (req, res) => {
       const query = String(body.query ?? '').trim();
       const itemId = parseOptionalItemId(body.itemId);
       const limit = parseLimit(body.limit);
-      const ontologyPathLabels =
-        itemId && reasoningSeedMap[itemId] ? reasoningSeedMap[itemId].ontologyPathLabels : [];
+      const ontologyPathLabels = itemId
+        ? reasoningSeedMap[itemId]?.ontologyPathLabels ?? getStageItemContext(itemId)?.ontologyPathLabels ?? []
+        : [];
 
       if (!query && !itemId) {
         sendJson(res, 400, { message: '知识库检索至少需要 query 或 itemId。' });
@@ -460,6 +649,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readRequestBody(req);
       const message = String(body.message ?? '').trim();
       const itemId = parseOptionalItemId(body.itemId);
+      const stage = parseOptionalReviewStage(body.stage);
 
       if (!message) {
         sendJson(res, 400, { message: '消息内容不能为空。' });
@@ -469,6 +659,7 @@ const server = http.createServer(async (req, res) => {
       const completion = await buildAiResponse({
         prompt: message,
         itemId,
+        stage,
         useCase: 'chat'
       });
 
@@ -488,6 +679,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readRequestBody(req);
       const prompt = String(body.prompt ?? '').trim();
       const itemId = parseOptionalItemId(body.itemId);
+      const stage = parseOptionalReviewStage(body.stage);
       const useCase = typeof body.useCase === 'string' ? body.useCase : 'general';
       const context = Array.isArray(body.context) ? body.context : [];
 
@@ -499,6 +691,7 @@ const server = http.createServer(async (req, res) => {
       const completion = await buildAiResponse({
         prompt,
         itemId,
+        stage,
         useCase,
         context
       });
@@ -517,39 +710,39 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      stateStore.prependActivity(
-        buildActivity('查看', `${getReviewItemById(routeMatch.itemId)?.title ?? '评审项'}依据`, 'info')
-      );
+      const reviewItemState = getReviewItemStateOrThrow(routeMatch.itemId);
+      stateStore.prependActivity(buildActivity('查看依据', reviewItemState.item.title, 'info'), reviewItemState.stage);
 
       sendJson(res, 200, reasoning);
       return;
     }
 
     if (routeMatch?.type === 'review-history' && method === 'GET') {
-      getReviewItemOrThrow(routeMatch.itemId);
+      const reviewItemState = getReviewItemStateOrThrow(routeMatch.itemId);
 
       sendJson(res, 200, {
         itemId: routeMatch.itemId,
-        entries: stateStore.getReviewHistory(routeMatch.itemId)
+        entries: stateStore.getReviewHistory(routeMatch.itemId, reviewItemState.stage)
       });
       return;
     }
 
     if (routeMatch?.type === 'review-item' && method === 'PATCH') {
       const body = await readRequestBody(req);
-      const currentItem = getReviewItemOrThrow(routeMatch.itemId);
-      const nextUpdates = parseReviewItemUpdates(currentItem, body);
+      const reviewItemState = getReviewItemStateOrThrow(routeMatch.itemId);
+      const nextUpdates = parseReviewItemUpdates(reviewItemState.item, body);
       const nextItem = {
-        ...currentItem,
+        ...reviewItemState.item,
         score: nextUpdates.score,
         comment: nextUpdates.comment,
         status: nextUpdates.status,
-        confidence: getNextConfidence(currentItem.confidence, nextUpdates.status),
+        confidence: getNextConfidence(reviewItemState.item.confidence, nextUpdates.status),
         updatedAt: new Date().toISOString()
       };
-      const activity = buildReviewActivity(nextItem, nextItem.status);
-      const historyEntry = buildReviewHistoryEntry(currentItem, nextItem, activity.action);
+      const activity = buildReviewActivity(nextItem, nextItem.status, reviewItemState.stage);
+      const historyEntry = buildReviewHistoryEntry(reviewItemState.item, nextItem, activity.action, reviewItemState.stage);
       const updatedItem = stateStore.updateReviewItem(routeMatch.itemId, nextItem, {
+        stage: reviewItemState.stage,
         activity,
         historyEntry
       });
@@ -561,7 +754,8 @@ const server = http.createServer(async (req, res) => {
 
       sendJson(res, 200, {
         item: updatedItem,
-        historyEntry
+        historyEntry,
+        activity
       });
       return;
     }

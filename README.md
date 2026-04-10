@@ -1,68 +1,75 @@
 # Kimi Agent Review Tool Site Design
 
-一个面向科研项目评审场景的 Web 演示项目。当前版本已经从“纯前端原型”演进为“前端 + 最小后端联调版”，可用于演示评审工作台、本体导航、推理依据、聊天助手，以及移动端视图。
+一个面向科研项目评审场景的 Web 工作台示例。当前版本已经不只是静态演示稿，而是一个包含前端界面、最小后端服务、本地运行态持久化和多阶段评审流程的可联调项目。
 
-## 当前能力
+## 当前概览
 
-- 评审工作区：支持展开评审项、评分、填写意见、保存、提交、标记争议。
-- 本体导航：支持本体树浏览、搜索、高亮路径、情境联合向量和最近激活概念展示。
-- 推理依据面板：可查看评审项的推理链、结论摘要、依据文档和本体路径。
-- 聊天助手：统一走后端 AI 接口，并展示关联知识库资料。
-- 辅助意见生成：支持基于当前评审项上下文和知识库材料生成评审建议，并展示本次引用资料。
-- 评审筛选能力：支持搜索、状态筛选、排序和单项历史记录查看。
-- 运行态持久化：评审项修改、活动流和历史记录会写入本地运行态文件，服务重启后保留。
+- 支持 `立项评审 / 中期检查 / 结题验收` 三个阶段，并为每个阶段维护独立的评审项、动态、历史和聊天上下文。
+- 支持阶段总览与流转校验。上一阶段未完成、存在待补材料或争议项时，后续阶段会被阻止进入。
+- 支持评审项编辑、评分、状态流转、辅助意见生成、推理依据查看和历史记录查看。
+- 支持 AI 助手引用资料展示，辅助意见生成也会展示本次参考资料。
+- 支持桌面端工作台设置、通知中心、演示角色切换和评审列表搜索/筛选/排序。
+- 后端会将运行态写入本地 JSON 文件，服务重启后仍能保留评审修改结果。
 
-## 当前状态
+## 已实现能力
 
-这个项目目前适合：
+### 评审流程
 
-- 前后端联调
-- 产品演示
-- 接入真实知识库和模型前的接口预演
+- 三阶段评审：`proposal`、`midterm`、`final`
+- 阶段总览：完成数、待处理数、待补材料数、争议数、完成度
+- 阶段流转规则校验
+- 阶段结论建议与全阶段流转展示
 
-它还不是完整生产系统，仍有这些限制：
+### 评审工作台
 
-- 登录仍然是演示模式，没有正式账号体系和权限控制。
-- 持久化目前基于本地 JSON 运行态文件，不是数据库。
-- AI 与知识库默认仍使用 mock provider。
-- 没有接入正式 RAG、向量检索、审计系统或自动化测试。
-- 构建通过，但当前前端仍有较大的打包体积告警。
-
-## 已实现功能
-
-### 前端
-
-- 桌面端和移动端评审工作区
-- 评审要点展开编辑
-- 评审状态扩展：`draft`、`pending`、`in_review`、`needs_revision`、`reviewed`、`disputed`
-- 搜索、筛选、排序
-- 推理依据侧栏
-- 聊天助手引用资料卡片
-- 辅助意见生成引用资料卡片
+- 评审项展开编辑
+- 评分、评审意见、状态更新
+- 状态枚举：`draft`、`pending`、`in_review`、`needs_revision`、`reviewed`、`disputed`
+- 评审项搜索、筛选、排序
 - 单项评审历史记录
+- 推理依据面板
+- 生成辅助意见并展示引用资料
 
-### 后端
+### 顶部导航与桌面体验
 
-- 最小 HTTP API 服务
-- 项目状态、知识库、推理依据、聊天、AI 补全接口
-- 评审项更新接口
-- 评审历史接口
-- 本地运行态持久化
-- 可替换的 Knowledge Base Provider / LLM Provider
+- 通知中心：展示最近评审动态与未读数量
+- 演示角色切换：`评审专家 / 申报方 / 系统管理员`
+- 设置面板：悬浮聊天、底部状态栏、推理面板打开时自动收起助手
+- 这些设置会保存在浏览器本地
+
+### AI 与知识库
+
+- 聊天助手走统一后端接口
+- 支持知识库搜索
+- 支持推理依据、文档引用和本体路径展示
+- 当前默认 provider 仍为 mock，可切换为 HTTP 模板 provider
+
+### 数据与持久化
+
+- 本地种子数据：项目、知识库、推理映射
+- 本地运行态持久化：阶段状态、评审项修改、活动流、历史记录
+- 重启后端后会继续读取上次运行态
+
+## 当前限制
+
+- 登录仍然是演示模式，不是正式账号体系
+- 角色切换目前主要作用在前端交互与权限提示上，未接正式鉴权
+- 持久化目前基于本地 JSON，不是数据库
+- 默认 AI 与知识库 provider 仍为 mock
+- 还没有自动化测试
+- 前端构建已通过，但仍有较大的 chunk 告警
 
 ## 技术栈
 
 - 前端：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui、Framer Motion
-- 后端：Node.js 内置 HTTP Server
-- 数据：本地 JSON 种子文件 + 本地运行态 JSON
-- 架构：可替换 provider 的集成模式
+- 后端：Node.js 原生 HTTP Server
+- 数据：本地 JSON 种子数据 + 本地运行态 JSON
 
 ## 项目结构
 
 ```text
 .
 |-- README.md
-|-- .gitignore
 `-- app/
     |-- README.md
     |-- package.json
@@ -71,7 +78,7 @@
     |   |   |-- app-state.json
     |   |   |-- knowledge-base.json
     |   |   |-- reasoning-map.json
-    |   |   `-- runtime-state.json        # 运行后生成，已加入忽略
+    |   |   `-- runtime-state.json
     |   |-- docs/
     |   |   `-- integration-contracts.md
     |   |-- services/
@@ -79,6 +86,7 @@
     |   |   `-- llm/
     |   |-- dev.mjs
     |   |-- index.mjs
+    |   |-- review-stages.mjs
     |   `-- state-store.mjs
     |-- src/
     |   |-- components/
@@ -97,7 +105,7 @@ cd app
 npm install
 ```
 
-### 2. 同时启动前后端
+### 2. 启动前后端
 
 ```bash
 npm run dev
@@ -131,11 +139,11 @@ npm run build
 npm run lint
 ```
 
-## 可用脚本
+## 常用脚本
 
 在 `app/` 目录下可用：
 
-- `npm run dev`：同时启动前端和后端
+- `npm run dev`：同时启动前后端
 - `npm run dev:client`：启动前端开发服务器
 - `npm run dev:server`：以 watch 模式启动后端
 - `npm run start:server`：启动后端服务
@@ -146,34 +154,40 @@ npm run lint
 ## API 概览
 
 - `GET /health`
-  返回后端健康状态和当前启用的 provider 信息。
+  返回后端健康状态、当前阶段以及启用中的 provider 信息。
 
 - `POST /api/auth/login`
   演示登录接口。
 
-- `GET /api/app-state`
-  返回项目、评审项、本体、活动流、聊天配置和知识库基础信息。
+- `GET /api/app-state?stage=proposal|midterm|final`
+  返回指定阶段的项目、评审项、本体、活动流、聊天配置和知识库基础信息。
+
+- `GET /api/review-stage/overview`
+  返回全阶段概览、完成度、阻塞信息和建议结论。
+
+- `POST /api/review-stage`
+  切换当前阶段，并执行阶段流转校验。
 
 - `GET /api/knowledge-base`
-  返回当前知识库元数据和文档列表。
+  返回当前知识库元数据与文档列表。
 
 - `POST /api/knowledge-base/search`
-  基于 `query`、`itemId` 和本体路径搜索知识库。
+  按 `query`、`itemId` 和上下文检索知识库。
 
 - `GET /api/review-items/:id/reasoning`
-  返回对应评审项的推理链和依据文档。
+  返回评审项推理链、总结和引用文档。
 
 - `GET /api/review-items/:id/history`
-  返回对应评审项的历史记录。
+  返回单项评审历史。
 
 - `PATCH /api/review-items/:id`
-  更新评审项的评分、意见和状态，并写入活动流与历史记录。
+  更新评分、意见和状态，并写入活动流与历史记录。
 
 - `POST /api/chat`
-  聊天接口，内部会先检索知识库，再调用 AI provider。
+  聊天接口，会先检索知识库，再调用 AI provider。
 
 - `POST /api/llm/complete`
-  通用 AI 补全接口，支持 `prompt`、`itemId`、`useCase` 和 `context`。
+  通用 AI 补全接口，支持 `prompt`、`itemId`、`stage`、`useCase` 和上下文。
 
 ## 持久化说明
 
@@ -181,15 +195,14 @@ npm run lint
 
 - `app/server/data/runtime-state.json`
 
-这个文件用于保存：
+当前会保存的内容包括：
 
-- 评审项最新状态
+- 当前阶段
+- 各阶段评审项最新状态
 - 活动流
 - 单项评审历史
 
-它已经加入 `.gitignore`，不会进入版本库。
-
-如果你想重置到初始演示数据，可以删除这个文件后重新启动后端。
+这个文件已加入 `.gitignore`，不会进入版本库。若要重置到初始演示数据，可以删除该文件后重新启动后端。
 
 ## Provider 机制
 
@@ -207,7 +220,7 @@ KNOWLEDGE_BASE_PROVIDER=mock-json
 KNOWLEDGE_BASE_PROVIDER=http-template
 ```
 
-`http-template` 可读取环境变量：
+`http-template` 支持读取：
 
 - `KNOWLEDGE_BASE_ENDPOINT`
 - `KNOWLEDGE_BASE_API_KEY`
@@ -227,7 +240,7 @@ LLM_PROVIDER=mock
 LLM_PROVIDER=http-template
 ```
 
-`http-template` 可读取环境变量：
+`http-template` 支持读取：
 
 - `LLM_ENDPOINT`
 - `LLM_API_KEY`
@@ -236,31 +249,34 @@ LLM_PROVIDER=http-template
 ## 关键文件
 
 - `app/src/App.tsx`
-  前端应用入口和桌面/移动端布局切换。
+  前端应用入口，负责桌面端与移动端布局组织。
 
 - `app/src/hooks/useReviewApp.ts`
-  前端全局状态与接口调用入口。
+  前端核心状态与接口调用入口，管理阶段切换、聊天、历史、推理和保存逻辑。
 
 - `app/src/components/panels/ReviewWorkspace.tsx`
-  评审工作区、筛选排序、历史与助手联动。
+  评审主工作区，包含评审项列表、阶段面板、历史与助手联动。
+
+- `app/src/components/navigation/TopNavigation.tsx`
+  顶部导航，包含阶段切换、通知、角色切换和设置面板。
 
 - `app/src/lib/api.ts`
   前端 API 封装。
 
-- `app/src/lib/review.ts`
-  评审状态、统计、筛选与排序逻辑。
+- `app/src/lib/review-stage.ts`
+  阶段配置、阶段文案与建议结论逻辑。
+
+- `app/src/lib/permissions.ts`
+  前端演示权限逻辑。
 
 - `app/server/index.mjs`
-  后端入口。
+  后端入口与路由处理。
+
+- `app/server/review-stages.mjs`
+  多阶段评审的种子数据与阶段配置。
 
 - `app/server/state-store.mjs`
-  本地运行态持久化逻辑。
-
-- `app/server/data/knowledge-base.json`
-  模拟知识库数据。
-
-- `app/server/docs/integration-contracts.md`
-  真实知识库和模型服务接入协议。
+  运行态持久化逻辑。
 
 ## 仓库地址
 

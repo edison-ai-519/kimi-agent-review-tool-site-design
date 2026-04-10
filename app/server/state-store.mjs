@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { REVIEW_STAGES, isReviewStage } from './review-stages.mjs';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -59,30 +60,37 @@ function buildSeedReviewHistories(reviewItems) {
   );
 }
 
-function createInitialState(appStateSeed) {
+function createStageRuntimeState(stageSeed) {
   return {
-    reviewItems: clone(appStateSeed.reviewItems),
-    activityFeed: clone(appStateSeed.activityFeed),
-    reviewHistories: buildSeedReviewHistories(appStateSeed.reviewItems)
+    reviewItems: clone(stageSeed.reviewItems),
+    activityFeed: clone(stageSeed.activityFeed),
+    reviewHistories: buildSeedReviewHistories(stageSeed.reviewItems)
   };
 }
 
-function normalizeRuntimeState(parsedState, appStateSeed) {
-  const initialState = createInitialState(appStateSeed);
-  const runtimeReviewItems = Array.isArray(parsedState?.reviewItems) ? parsedState.reviewItems : [];
+function createInitialState(stageSeeds, defaultStage) {
+  return {
+    currentStage: isReviewStage(defaultStage) ? defaultStage : 'proposal',
+    stageStates: Object.fromEntries(REVIEW_STAGES.map((stage) => [stage, createStageRuntimeState(stageSeeds[stage])]))
+  };
+}
+
+function normalizeStageState(parsedStageState, stageSeed) {
+  const initialState = createStageRuntimeState(stageSeed);
+  const runtimeReviewItems = Array.isArray(parsedStageState?.reviewItems) ? parsedStageState.reviewItems : [];
   const runtimeReviewItemsById = new Map(runtimeReviewItems.map((item) => [item.id, item]));
-  const mergedSeedReviewItems = appStateSeed.reviewItems.map((seedItem) => ({
+  const mergedSeedReviewItems = stageSeed.reviewItems.map((seedItem) => ({
     ...seedItem,
     ...(runtimeReviewItemsById.get(seedItem.id) ?? {})
   }));
   const mergedExtraReviewItems = runtimeReviewItems.filter(
-    (runtimeItem) => !appStateSeed.reviewItems.some((seedItem) => seedItem.id === runtimeItem.id)
+    (runtimeItem) => !stageSeed.reviewItems.some((seedItem) => seedItem.id === runtimeItem.id)
   );
   const reviewItems = [...mergedSeedReviewItems, ...mergedExtraReviewItems];
 
   const reviewHistoriesSource =
-    parsedState?.reviewHistories && typeof parsedState.reviewHistories === 'object' && !Array.isArray(parsedState.reviewHistories)
-      ? parsedState.reviewHistories
+    parsedStageState?.reviewHistories && typeof parsedStageState.reviewHistories === 'object' && !Array.isArray(parsedStageState.reviewHistories)
+      ? parsedStageState.reviewHistories
       : initialState.reviewHistories;
 
   const reviewHistories = Object.fromEntries(
@@ -94,20 +102,45 @@ function normalizeRuntimeState(parsedState, appStateSeed) {
 
   return {
     reviewItems,
-    activityFeed: Array.isArray(parsedState?.activityFeed) ? clone(parsedState.activityFeed) : initialState.activityFeed,
+    activityFeed: Array.isArray(parsedStageState?.activityFeed) ? clone(parsedStageState.activityFeed) : initialState.activityFeed,
     reviewHistories
   };
 }
 
-export function createStateStore({ dataDir, appStateSeed }) {
+function normalizeLegacyFlatState(parsedState, stageSeeds, defaultStage) {
+  const initialState = createInitialState(stageSeeds, defaultStage);
+
+  return {
+    currentStage: initialState.currentStage,
+    stageStates: {
+      ...initialState.stageStates,
+      proposal: normalizeStageState(parsedState, stageSeeds.proposal)
+    }
+  };
+}
+
+function normalizeRuntimeState(parsedState, stageSeeds, defaultStage) {
+  if (parsedState?.stageStates && typeof parsedState.stageStates === 'object' && !Array.isArray(parsedState.stageStates)) {
+    return {
+      currentStage: isReviewStage(parsedState.currentStage) ? parsedState.currentStage : createInitialState(stageSeeds, defaultStage).currentStage,
+      stageStates: Object.fromEntries(
+        REVIEW_STAGES.map((stage) => [stage, normalizeStageState(parsedState.stageStates[stage], stageSeeds[stage])])
+      )
+    };
+  }
+
+  return normalizeLegacyFlatState(parsedState, stageSeeds, defaultStage);
+}
+
+export function createStateStore({ dataDir, stageSeeds, defaultStage }) {
   const runtimeStatePath = path.join(dataDir, 'runtime-state.json');
-  let state = createInitialState(appStateSeed);
+  let state = createInitialState(stageSeeds, defaultStage);
 
   if (existsSync(runtimeStatePath)) {
     try {
-      state = normalizeRuntimeState(JSON.parse(readFileSync(runtimeStatePath, 'utf8')), appStateSeed);
+      state = normalizeRuntimeState(JSON.parse(readFileSync(runtimeStatePath, 'utf8')), stageSeeds, defaultStage);
     } catch {
-      state = createInitialState(appStateSeed);
+      state = createInitialState(stageSeeds, defaultStage);
     }
   }
 
@@ -118,28 +151,51 @@ export function createStateStore({ dataDir, appStateSeed }) {
   persist();
 
   return {
-    getReviewItems() {
-      return clone(state.reviewItems);
+    getCurrentStage() {
+      return state.currentStage;
     },
 
-    getActivityFeed() {
-      return clone(state.activityFeed);
+    setCurrentStage(stage) {
+      if (!isReviewStage(stage)) {
+        return null;
+      }
+
+      state.currentStage = stage;
+      persist();
+      return state.currentStage;
     },
 
-    getReviewHistory(itemId) {
-      return clone(state.reviewHistories[itemId] ?? []);
+    getReviewItems(stage = state.currentStage) {
+      return clone(state.stageStates[stage]?.reviewItems ?? []);
     },
 
-    prependActivity(activity) {
-      state.activityFeed = [clone(activity), ...state.activityFeed].slice(0, 8);
+    getActivityFeed(stage = state.currentStage) {
+      return clone(state.stageStates[stage]?.activityFeed ?? []);
+    },
+
+    getReviewHistory(itemId, stage = state.currentStage) {
+      return clone(state.stageStates[stage]?.reviewHistories[itemId] ?? []);
+    },
+
+    prependActivity(activity, stage = state.currentStage) {
+      if (!state.stageStates[stage]) {
+        return null;
+      }
+
+      state.stageStates[stage].activityFeed = [clone(activity), ...state.stageStates[stage].activityFeed].slice(0, 8);
       persist();
       return clone(activity);
     },
 
     updateReviewItem(itemId, nextUpdates, options = {}) {
+      const stage = isReviewStage(options.stage) ? options.stage : state.currentStage;
+      if (!state.stageStates[stage]) {
+        return null;
+      }
+
       let updatedItem = null;
 
-      state.reviewItems = state.reviewItems.map((item) => {
+      state.stageStates[stage].reviewItems = state.stageStates[stage].reviewItems.map((item) => {
         if (item.id !== itemId) {
           return item;
         }
@@ -157,11 +213,14 @@ export function createStateStore({ dataDir, appStateSeed }) {
       }
 
       if (options.historyEntry) {
-        state.reviewHistories[itemId] = [clone(options.historyEntry), ...(state.reviewHistories[itemId] ?? [])].slice(0, 20);
+        state.stageStates[stage].reviewHistories[itemId] = [
+          clone(options.historyEntry),
+          ...(state.stageStates[stage].reviewHistories[itemId] ?? [])
+        ].slice(0, 20);
       }
 
       if (options.activity) {
-        state.activityFeed = [clone(options.activity), ...state.activityFeed].slice(0, 8);
+        state.stageStates[stage].activityFeed = [clone(options.activity), ...state.stageStates[stage].activityFeed].slice(0, 8);
       }
 
       persist();

@@ -5,9 +5,12 @@ import type {
   KnowledgeSearchResult,
   LlmCompletionResult,
   ReasoningData,
+  ReviewActivity,
   ReviewHistoryEntry,
   ReviewHistoryPayload,
-  ReviewItem
+  ReviewItem,
+  ReviewStage,
+  ReviewStageOverviewPayload
 } from '@/types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
@@ -46,8 +49,25 @@ export function login(username: string, password: string) {
   });
 }
 
-export function getAppState() {
-  return request<AppStatePayload>('/api/app-state');
+export function getAppState(stage?: ReviewStage) {
+  const searchParams = new URLSearchParams();
+  if (stage) {
+    searchParams.set('stage', stage);
+  }
+
+  const search = searchParams.toString();
+  return request<AppStatePayload>(`/api/app-state${search ? `?${search}` : ''}`);
+}
+
+export function setReviewStage(stage: ReviewStage) {
+  return request<{ stage: ReviewStage; label: string; message?: string }>('/api/review-stage', {
+    method: 'POST',
+    body: JSON.stringify({ stage })
+  });
+}
+
+export function getReviewStageOverview() {
+  return request<ReviewStageOverviewPayload>('/api/review-stage/overview');
 }
 
 export function getKnowledgeBase() {
@@ -59,17 +79,18 @@ export function getReasoning(itemId: string) {
 }
 
 export function updateReviewItem(itemId: string, payload: Partial<Pick<ReviewItem, 'score' | 'comment' | 'status'>>) {
-  return request<{ item: ReviewItem; historyEntry?: ReviewHistoryEntry }>(`/api/review-items/${itemId}`, {
+  return request<{ item: ReviewItem; historyEntry?: ReviewHistoryEntry; activity?: ReviewActivity }>(`/api/review-items/${itemId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   });
 }
 
-export function sendChatMessage(message: string, itemId?: string) {
+export function sendChatMessage(message: string, itemId?: string, stage?: ReviewStage) {
   return request<ChatReplyPayload>('/api/chat', {
     method: 'POST',
     body: JSON.stringify({
       message,
+      ...(stage ? { stage } : {}),
       ...(itemId ? { itemId } : {})
     })
   });
@@ -93,6 +114,7 @@ export function searchKnowledgeBase(payload: {
 export function requestLlmCompletion(payload: {
   prompt: string;
   itemId?: string;
+  stage?: ReviewStage;
   useCase?: string;
   context?: string[];
 }) {

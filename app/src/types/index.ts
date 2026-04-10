@@ -3,6 +3,7 @@ export type UserRole = 'expert' | 'applicant' | 'admin';
 
 // Review stages
 export type ReviewStage = 'proposal' | 'midterm' | 'final';
+export type ReviewStageStatus = 'not_started' | 'in_progress' | 'blocked' | 'completed';
 
 // Review item status
 export type ReviewStatus = 'draft' | 'pending' | 'in_review' | 'needs_revision' | 'reviewed' | 'disputed';
@@ -125,6 +126,12 @@ export interface ReviewStats {
   avgConfidence: number;
 }
 
+export interface DesktopUiPreferences {
+  showFloatingChat: boolean;
+  showBottomStatusBar: boolean;
+  autoHideAssistantOnReasoning: boolean;
+}
+
 export interface ReviewHistoryEntry {
   id: string;
   itemId: string;
@@ -212,4 +219,24 @@ export interface AppStatePayload {
 export interface ReviewHistoryPayload {
   itemId: string;
   entries: ReviewHistoryEntry[];
+}
+
+export interface ReviewStageOverview {
+  stage: ReviewStage;
+  label: string;
+  status: ReviewStageStatus;
+  total: number;
+  completed: number;
+  pending: number;
+  disputed: number;
+  needsRevision: number;
+  completionPercent: number;
+  canEnter: boolean;
+  blockedReason?: string;
+  recommendation: string;
+}
+
+export interface ReviewStageOverviewPayload {
+  currentStage: ReviewStage;
+  stages: ReviewStageOverview[];
 }

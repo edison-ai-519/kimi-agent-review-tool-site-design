@@ -9,12 +9,16 @@ import type {
   ReviewActivity,
   ReviewHistoryEntry,
   ReviewItem,
+  ReviewStage,
+  ReviewStageOverviewPayload,
   SystemStatus
 } from '@/types';
 
 type LoadedAppState = Omit<AppStatePayload, 'systemStatus'> & {
   systemStatus: SystemStatus;
 };
+
+type ChatMessagesByStage = Partial<Record<ReviewStage, ChatMessage[]>>;
 
 function createAssistantMessage(content: string, relatedDocuments: KnowledgeDocument[] = []): ChatMessage {
   return {
@@ -36,41 +40,23 @@ function hydrateAppState(payload: AppStatePayload): LoadedAppState {
   };
 }
 
-function prependActivity(currentActivities: ReviewActivity[], activity: ReviewActivity) {
-  return [activity, ...currentActivities].slice(0, 8);
-}
-
-function buildActivity(action: string, target: string, type: ReviewActivity['type']): ReviewActivity {
+function prependStageMessages(currentMessages: ChatMessagesByStage, stage: ReviewStage, message: ChatMessage) {
   return {
-    id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    action,
-    target,
-    type,
-    createdAt: new Date().toISOString()
+    ...currentMessages,
+    [stage]: [...(currentMessages[stage] ?? []), message]
   };
 }
 
-function buildReviewActivity(reviewItem: ReviewItem): ReviewActivity {
-  switch (reviewItem.status) {
-    case 'reviewed':
-      return buildActivity('提交评审', reviewItem.title, 'success');
-    case 'disputed':
-      return buildActivity('标记争议', reviewItem.title, 'warning');
-    case 'needs_revision':
-      return buildActivity('要求补材料', reviewItem.title, 'warning');
-    case 'in_review':
-      return buildActivity('转入复核', reviewItem.title, 'info');
-    case 'draft':
-      return buildActivity('保存草稿', reviewItem.title, 'info');
-    default:
-      return buildActivity('更新评审项', reviewItem.title, 'info');
-  }
+function prependActivityMessage(action: string, target: string): ChatMessage {
+  return createAssistantMessage(`${action}：${target}`);
 }
 
 export function useReviewApp() {
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [currentStage, setCurrentStage] = useState<ReviewStage>('proposal');
   const [appState, setAppState] = useState<LoadedAppState | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [stageOverview, setStageOverview] = useState<ReviewStageOverviewPayload | null>(null);
+  const [chatMessagesByStage, setChatMessagesByStage] = useState<ChatMessagesByStage>({});
   const [reasoningByItem, setReasoningByItem] = useState<Record<string, ReasoningData>>({});
   const [historyByItem, setHistoryByItem] = useState<Record<string, ReviewHistoryEntry[]>>({});
   const [generatedReferencesByItem, setGeneratedReferencesByItem] = useState<Record<string, KnowledgeDocument[]>>({});
@@ -83,17 +69,31 @@ export function useReviewApp() {
   const [historyLoadingItemId, setHistoryLoadingItemId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadAppState = async () => {
+  const chatMessages = chatMessagesByStage[currentStage] ?? [];
+
+  const loadStageOverview = async () => {
+    const overview = await api.getReviewStageOverview();
+    setStageOverview(overview);
+    return overview;
+  };
+
+  const loadAppState = async (stage?: ReviewStage) => {
     setIsLoadingAppState(true);
     setErrorMessage(null);
 
     try {
-      const payload = await api.getAppState();
+      const [payload, overview] = await Promise.all([api.getAppState(stage), api.getReviewStageOverview()]);
       const nextAppState = hydrateAppState(payload);
       setAppState(nextAppState);
-      setChatMessages((currentMessages) =>
-        currentMessages.length > 0 ? currentMessages : [createAssistantMessage(nextAppState.chatConfig.welcomeMessage)]
-      );
+      setCurrentStage(nextAppState.project.stage);
+      setStageOverview(overview);
+      setChatMessagesByStage((currentMessages) => ({
+        ...currentMessages,
+        [nextAppState.project.stage]:
+          currentMessages[nextAppState.project.stage]?.length && currentMessages[nextAppState.project.stage]!.length > 0
+            ? currentMessages[nextAppState.project.stage]
+            : [createAssistantMessage(nextAppState.chatConfig.welcomeMessage)]
+      }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '加载应用状态失败。');
       throw error;
@@ -107,13 +107,13 @@ export function useReviewApp() {
       return;
     }
 
-    void loadAppState();
+    void loadAppState().catch(() => undefined);
   }, [session]);
 
   const login = async (username: string, password: string) => {
     setIsAuthenticating(true);
     setErrorMessage(null);
-    setChatMessages([]);
+    setChatMessagesByStage({});
     setReasoningByItem({});
     setHistoryByItem({});
     setGeneratedReferencesByItem({});
@@ -129,6 +129,22 @@ export function useReviewApp() {
     }
   };
 
+  const changeStage = async (stage: ReviewStage) => {
+    if (stage === currentStage && appState?.project.stage === stage) {
+      return;
+    }
+
+    setErrorMessage(null);
+
+    try {
+      await api.setReviewStage(stage);
+      await loadAppState(stage);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '切换评审阶段失败。');
+      throw error;
+    }
+  };
+
   const ensureReasoning = async (item: ReviewItem) => {
     if (reasoningByItem[item.id]) {
       return reasoningByItem[item.id];
@@ -139,6 +155,13 @@ export function useReviewApp() {
 
     try {
       const reasoning = await api.getReasoning(item.id);
+      const activity: ReviewActivity = {
+        id: `activity-${Date.now()}`,
+        action: '查看依据',
+        target: item.title,
+        type: 'info',
+        createdAt: new Date().toISOString()
+      };
       setReasoningByItem((current) => ({
         ...current,
         [item.id]: reasoning
@@ -147,7 +170,7 @@ export function useReviewApp() {
         current
           ? {
               ...current,
-              activityFeed: prependActivity(current.activityFeed, buildActivity('查看', `${item.title}依据`, 'info'))
+              activityFeed: [activity, ...current.activityFeed].slice(0, 8)
             }
           : current
       );
@@ -183,13 +206,13 @@ export function useReviewApp() {
     }
   };
 
-  const updateLocalReviewItem = (nextItem: ReviewItem, activity: ReviewActivity) => {
+  const updateLocalReviewItem = (nextItem: ReviewItem, activity?: ReviewActivity) => {
     setAppState((current) =>
       current
         ? {
             ...current,
             reviewItems: current.reviewItems.map((item) => (item.id === nextItem.id ? nextItem : item)),
-            activityFeed: prependActivity(current.activityFeed, activity)
+            activityFeed: activity ? [activity, ...current.activityFeed].slice(0, 8) : current.activityFeed
           }
         : current
     );
@@ -201,7 +224,8 @@ export function useReviewApp() {
 
     try {
       const response = await api.updateReviewItem(itemId, { score, comment, status });
-      updateLocalReviewItem(response.item, buildReviewActivity(response.item));
+      updateLocalReviewItem(response.item, response.activity);
+      void loadStageOverview().catch(() => undefined);
       const historyEntry = response.historyEntry;
       if (historyEntry) {
         setHistoryByItem((current) => ({
@@ -219,6 +243,7 @@ export function useReviewApp() {
   };
 
   const generateReviewComment = async (item: ReviewItem) => {
+    const stageAtRequest = currentStage;
     setGeneratingItemId(item.id);
     setErrorMessage(null);
 
@@ -226,6 +251,7 @@ export function useReviewApp() {
       const completion = await api.requestLlmCompletion({
         prompt: `请为“${item.title}”生成一段评审辅助意见，要求包含结论、依据和风险边界。`,
         itemId: item.id,
+        stage: stageAtRequest,
         useCase: 'review-suggestion',
         context: [
           item.description,
@@ -269,6 +295,7 @@ export function useReviewApp() {
       return;
     }
 
+    const stageAtSend = currentStage;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -276,23 +303,28 @@ export function useReviewApp() {
       timestamp: new Date()
     };
 
-    setChatMessages((current) => [...current, userMessage]);
+    setChatMessagesByStage((current) => prependStageMessages(current, stageAtSend, userMessage));
     setIsChatPending(true);
     setErrorMessage(null);
 
     try {
-      const response = await api.sendChatMessage(trimmedContent, itemId);
-      setChatMessages((current) => [
+      const response = await api.sendChatMessage(trimmedContent, itemId, stageAtSend);
+      setChatMessagesByStage((current) => ({
         ...current,
-        {
-          ...response.message,
-          timestamp: new Date(response.message.timestamp),
-          relatedDocuments: response.relatedDocuments ?? []
-        }
-      ]);
+        [stageAtSend]: [
+          ...(current[stageAtSend] ?? []),
+          {
+            ...response.message,
+            timestamp: new Date(response.message.timestamp),
+            relatedDocuments: response.relatedDocuments ?? []
+          }
+        ]
+      }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '发送消息失败。');
-      setChatMessages((current) => [...current, createAssistantMessage('消息发送失败了，请稍后重试。')]);
+      setChatMessagesByStage((current) =>
+        prependStageMessages(current, stageAtSend, createAssistantMessage('消息发送失败了，请稍后重试。'))
+      );
     } finally {
       setIsChatPending(false);
     }
@@ -300,7 +332,9 @@ export function useReviewApp() {
 
   return {
     session,
+    currentStage,
     appState,
+    stageOverview,
     chatMessages,
     reasoningByItem,
     historyByItem,
@@ -313,12 +347,14 @@ export function useReviewApp() {
     reasoningLoadingItemId,
     historyLoadingItemId,
     errorMessage,
-    reloadAppState: loadAppState,
+    reloadAppState: () => loadAppState(currentStage),
     login,
+    changeStage,
     ensureReasoning,
     ensureReviewHistory,
     saveReviewItem,
     generateReviewComment,
-    sendChat
+    sendChat,
+    prependActivityMessage
   };
 }

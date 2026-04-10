@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -22,15 +22,53 @@ import { OntologyPanel } from '@/components/panels/OntologyPanel';
 import { ReasoningPanel } from '@/components/panels/ReasoningPanel';
 import { ReviewWorkspace } from '@/components/panels/ReviewWorkspace';
 import { useReviewApp } from '@/hooks/useReviewApp';
+import { getReviewWorkspacePermissions } from '@/lib/permissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { buildReviewStats } from '@/lib/review';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import type { ReviewItem, ReviewStage, UserRole } from '@/types';
+import type { AuthSession, DesktopUiPreferences, ReviewItem, ReviewStage, UserRole } from '@/types';
 import './App.css';
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
+
+const desktopPreferencesStorageKey = 'kimi-review-desktop-preferences';
+const notificationReadAtStorageKey = 'kimi-review-notification-read-at';
+const defaultDesktopPreferences: DesktopUiPreferences = {
+  showFloatingChat: true,
+  showBottomStatusBar: true,
+  autoHideAssistantOnReasoning: true
+};
+
+function readStoredPreferences(): DesktopUiPreferences {
+  if (typeof window === 'undefined') {
+    return defaultDesktopPreferences;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(desktopPreferencesStorageKey);
+    if (!rawValue) {
+      return defaultDesktopPreferences;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<DesktopUiPreferences>;
+    return {
+      ...defaultDesktopPreferences,
+      ...parsedValue
+    };
+  } catch {
+    return defaultDesktopPreferences;
+  }
+}
+
+function readStoredNotificationReadAt() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window.localStorage.getItem(notificationReadAtStorageKey);
+}
 
 function LoginPage({
   isLoading,
@@ -238,7 +276,10 @@ function LoadingPage({ title, message }: { title: string; message: string }) {
 }
 
 function DesktopDashboard({
+  session,
+  currentStage,
   appState,
+  stageOverview,
   chatMessages,
   reasoningByItem,
   historyByItem,
@@ -249,13 +290,18 @@ function DesktopDashboard({
   reasoningLoadingItemId,
   historyLoadingItemId,
   errorMessage,
+  isLoadingAppState,
   onEnsureReasoning,
   onEnsureReviewHistory,
+  onStageChange,
   onSendChat,
   onSaveReviewItem,
   onGenerateComment
 }: {
+  session: AuthSession;
+  currentStage: ReviewStage;
   appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
+  stageOverview: ReturnType<typeof useReviewApp>['stageOverview'];
   chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
   reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
   historyByItem: ReturnType<typeof useReviewApp>['historyByItem'];
@@ -266,28 +312,58 @@ function DesktopDashboard({
   reasoningLoadingItemId: string | null;
   historyLoadingItemId: string | null;
   errorMessage: string | null;
+  isLoadingAppState: boolean;
   onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
   onEnsureReviewHistory: (itemId: string) => Promise<unknown>;
+  onStageChange: (stage: ReviewStage) => Promise<void>;
   onSendChat: (message: string, itemId?: string) => void;
   onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
   onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
 }) {
-  const [userRole, setUserRole] = useState<UserRole>('expert');
-  const [currentStage, setCurrentStage] = useState<ReviewStage>(appState.project.stage);
+  const [userRole, setUserRole] = useState<UserRole>(session.user.role);
   const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
   const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
   const [isOntologyPanelCollapsed, setIsOntologyPanelCollapsed] = useState(false);
+  const [uiPreferences, setUiPreferences] = useState<DesktopUiPreferences>(() => readStoredPreferences());
+  const [lastNotificationReadAt, setLastNotificationReadAt] = useState<string | null>(() => readStoredNotificationReadAt());
 
-  const currentProject = { ...appState.project, stage: currentStage };
+  const currentProject = appState.project;
   const selectedReviewItem = appState.reviewItems.find((item) => item.id === selectedReviewItemId) ?? null;
   const activeReviewItem = appState.reviewItems.find((item) => item.id === activeReviewItemId) ?? null;
   const selectedReasoning = selectedReviewItem ? reasoningByItem[selectedReviewItem.id] ?? null : null;
   const highlightedOntologyPath = selectedReasoning?.ontologyPathIds ?? [];
+  const reviewPermissions = getReviewWorkspacePermissions(userRole);
+  const unreadNotificationCount = appState.activityFeed.filter((activity) => {
+    if (!lastNotificationReadAt) {
+      return true;
+    }
+
+    return new Date(activity.createdAt).getTime() > new Date(lastNotificationReadAt).getTime();
+  }).length;
+
+  useEffect(() => {
+    window.localStorage.setItem(desktopPreferencesStorageKey, JSON.stringify(uiPreferences));
+  }, [uiPreferences]);
+
+  useEffect(() => {
+    if (lastNotificationReadAt) {
+      window.localStorage.setItem(notificationReadAtStorageKey, lastNotificationReadAt);
+      return;
+    }
+
+    window.localStorage.removeItem(notificationReadAtStorageKey);
+  }, [lastNotificationReadAt]);
 
   const handleShowReasoning = (item: ReviewItem) => {
     setSelectedReviewItemId(item.id);
     setActiveReviewItemId(item.id);
     void onEnsureReasoning(item).catch(() => undefined);
+  };
+
+  const handleNotificationsViewed = () => {
+    if (appState.activityFeed[0]?.createdAt) {
+      setLastNotificationReadAt(appState.activityFeed[0].createdAt);
+    }
   };
 
   return (
@@ -296,9 +372,26 @@ function DesktopDashboard({
         userRole={userRole}
         currentStage={currentStage}
         project={currentProject}
+        currentUserName={session.user.name}
+        activityFeed={appState.activityFeed}
+        unreadNotificationCount={unreadNotificationCount}
         ontologyVersion={appState.systemStatus.ontologyVersion}
+        systemStatus={appState.systemStatus}
+        stageOverview={stageOverview?.stages}
+        uiPreferences={uiPreferences}
         onRoleChange={setUserRole}
-        onStageChange={setCurrentStage}
+        onStageChange={(stage) => {
+          setSelectedReviewItemId(null);
+          setActiveReviewItemId(null);
+          void onStageChange(stage).catch(() => undefined);
+        }}
+        onNotificationsViewed={handleNotificationsViewed}
+        onPreferencesChange={(patch) =>
+          setUiPreferences((current) => ({
+            ...current,
+            ...patch
+          }))
+        }
       />
 
       <div className="flex flex-1 overflow-hidden pb-8 pt-16">
@@ -326,6 +419,11 @@ function DesktopDashboard({
 
         <div className="min-w-0 flex-1 overflow-hidden px-4 py-4">
           {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
+          {isLoadingAppState && (
+            <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-sm text-blue-700">
+              正在切换评审阶段并加载对应数据...
+            </div>
+          )}
 
           <ReviewWorkspace
             project={currentProject}
@@ -334,12 +432,16 @@ function DesktopDashboard({
             chatConfig={appState.chatConfig}
             reviewHistoryByItem={historyByItem}
             generatedReferencesByItem={generatedReferencesByItem}
+            stageOverview={stageOverview?.stages}
+            userRole={userRole}
+            permissions={reviewPermissions}
             isChatPending={isChatPending}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
             historyLoadingItemId={historyLoadingItemId}
             activeReviewItem={activeReviewItem}
             isReasoningVisible={Boolean(selectedReviewItem)}
+            autoHideAssistantOnReasoning={uiPreferences.autoHideAssistantOnReasoning}
             onShowReasoning={handleShowReasoning}
             onLoadHistory={onEnsureReviewHistory}
             onActiveReviewItemChange={setActiveReviewItemId}
@@ -359,15 +461,17 @@ function DesktopDashboard({
         </AnimatePresence>
       </div>
 
-      <BottomStatusBar status={appState.systemStatus} />
+      {uiPreferences.showBottomStatusBar && <BottomStatusBar status={appState.systemStatus} />}
 
-      <FloatingChat
-        messages={chatMessages}
-        quickActions={appState.chatConfig.quickActions}
-        isPending={isChatPending}
-        activeReviewItem={activeReviewItem}
-        onSendMessage={(message) => onSendChat(message, activeReviewItem?.id)}
-      />
+      {uiPreferences.showFloatingChat && (
+        <FloatingChat
+          messages={chatMessages}
+          quickActions={appState.chatConfig.quickActions}
+          isPending={isChatPending}
+          activeReviewItem={activeReviewItem}
+          onSendMessage={(message) => onSendChat(message, activeReviewItem?.id)}
+        />
+      )}
     </div>
   );
 }
@@ -551,7 +655,9 @@ function App() {
   const isMobile = useIsMobile();
   const {
     session,
+    currentStage,
     appState,
+    stageOverview,
     chatMessages,
     reasoningByItem,
     historyByItem,
@@ -566,6 +672,7 @@ function App() {
     errorMessage,
     reloadAppState,
     login,
+    changeStage,
     ensureReasoning,
     ensureReviewHistory,
     saveReviewItem,
@@ -630,7 +737,10 @@ function App() {
           />
         ) : (
           <DesktopDashboard
+            session={session}
+            currentStage={currentStage}
             appState={appState}
+            stageOverview={stageOverview}
             chatMessages={chatMessages}
             reasoningByItem={reasoningByItem}
             historyByItem={historyByItem}
@@ -641,8 +751,10 @@ function App() {
             reasoningLoadingItemId={reasoningLoadingItemId}
             historyLoadingItemId={historyLoadingItemId}
             errorMessage={errorMessage}
+            isLoadingAppState={isLoadingAppState}
             onEnsureReasoning={ensureReasoning}
             onEnsureReviewHistory={ensureReviewHistory}
+            onStageChange={changeStage}
             onSendChat={sendChat}
             onSaveReviewItem={saveReviewItem}
             onGenerateComment={generateReviewComment}
