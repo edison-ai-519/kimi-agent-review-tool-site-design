@@ -8,6 +8,7 @@
 - 支持阶段总览与流转校验。上一阶段未完成、存在待补材料或争议项时，后续阶段会被阻止进入。
 - 支持评审项编辑、评分、状态流转、辅助意见生成、推理依据查看和历史记录查看。
 - 支持 AI 助手引用资料展示，辅助意见生成也会展示本次参考资料。
+- 支持本体驱动规则校验，评审项会展示本体校验结果、LLM 参与建议和参考资料。
 - 支持桌面端工作台设置、通知中心、演示角色切换和评审列表搜索/筛选/排序。
 - 后端会将运行态写入本地 JSON 文件，服务重启后仍能保留评审修改结果。
 
@@ -29,12 +30,14 @@
 - 单项评审历史记录
 - 推理依据面板
 - 生成辅助意见并展示引用资料
+- 本体校验状态、命中概念、证据检查和 LLM 评审建议展示
 
 ### 顶部导航与桌面体验
 
 - 通知中心：展示最近评审动态与未读数量
 - 演示角色切换：`评审专家 / 申报方 / 系统管理员`
-- 设置面板：悬浮聊天、底部状态栏、推理面板打开时自动收起助手
+- 设置面板：悬浮聊天、底部状态栏
+- 桌面端只保留右下角悬浮评审助手，不再占用评审工作区中间栏
 - 这些设置会保存在浏览器本地
 
 ### AI 与知识库
@@ -42,6 +45,7 @@
 - 聊天助手走统一后端接口
 - 支持知识库搜索
 - 支持推理依据、文档引用和本体路径展示
+- 支持本体验证 provider，`/api/app-state` 返回评审项时会带上 `ontologyValidation` 和 `llmParticipation`
 - 当前默认 provider 仍为 mock，可切换为 HTTP 模板 provider
 
 ### 数据与持久化
@@ -77,15 +81,18 @@
     |   |-- data/
     |   |   |-- app-state.json
     |   |   |-- knowledge-base.json
+    |   |   |-- ontology-knowledge-base.json
     |   |   |-- reasoning-map.json
     |   |   `-- runtime-state.json
     |   |-- docs/
     |   |   `-- integration-contracts.md
     |   |-- services/
     |   |   |-- knowledge-base/
-    |   |   `-- llm/
+    |   |   |-- llm/
+    |   |   `-- ontology-validation/
     |   |-- dev.mjs
     |   |-- index.mjs
+    |   |-- ontology-validation.mjs
     |   |-- review-stages.mjs
     |   `-- state-store.mjs
     |-- src/
@@ -160,7 +167,7 @@ npm run lint
   演示登录接口。
 
 - `GET /api/app-state?stage=proposal|midterm|final`
-  返回指定阶段的项目、评审项、本体、活动流、聊天配置和知识库基础信息。
+  返回指定阶段的项目、评审项、本体、活动流、聊天配置和知识库基础信息。评审项会附带本体校验与 LLM 参与结果。
 
 - `GET /api/review-stage/overview`
   返回全阶段概览、完成度、阻塞信息和建议结论。
@@ -170,6 +177,9 @@ npm run lint
 
 - `GET /api/knowledge-base`
   返回当前知识库元数据与文档列表。
+
+- `GET /api/ontology-validation/knowledge-base`
+  返回当前本体验证 provider 暴露的本体知识库元数据。
 
 - `POST /api/knowledge-base/search`
   按 `query`、`itemId` 和上下文检索知识库。
@@ -184,10 +194,10 @@ npm run lint
   更新评分、意见和状态，并写入活动流与历史记录。
 
 - `POST /api/chat`
-  聊天接口，会先检索知识库，再调用 AI provider。
+  聊天接口，会先检索知识库并注入本体上下文，再调用 AI provider。
 
 - `POST /api/llm/complete`
-  通用 AI 补全接口，支持 `prompt`、`itemId`、`stage`、`useCase` 和上下文。
+  通用 AI 补全接口，支持 `prompt`、`itemId`、`stage`、`useCase` 和上下文。用于辅助意见生成时也会带上本体校验上下文。
 
 ## 持久化说明
 
@@ -246,6 +256,30 @@ LLM_PROVIDER=http-template
 - `LLM_API_KEY`
 - `LLM_MODEL`
 
+### Ontology Validation Provider
+
+当前内置：
+
+- `mock-json`
+- `http-template`
+
+切换方式：
+
+```bash
+ONTOLOGY_VALIDATION_PROVIDER=mock-json
+ONTOLOGY_VALIDATION_PROVIDER=http-template
+```
+
+`http-template` 支持读取：
+
+- `ONTOLOGY_VALIDATION_ENDPOINT`
+- `ONTOLOGY_VALIDATION_API_KEY`
+- `ONTOLOGY_VALIDATION_NAMESPACE`
+
+详细 JSON 对接契约见：
+
+- `app/server/docs/integration-contracts.md`
+
 ## 关键文件
 
 - `app/src/App.tsx`
@@ -255,7 +289,7 @@ LLM_PROVIDER=http-template
   前端核心状态与接口调用入口，管理阶段切换、聊天、历史、推理和保存逻辑。
 
 - `app/src/components/panels/ReviewWorkspace.tsx`
-  评审主工作区，包含评审项列表、阶段面板、历史与助手联动。
+  评审主工作区，包含评审项列表、阶段面板、历史、本体校验和 LLM 评审建议。
 
 - `app/src/components/navigation/TopNavigation.tsx`
   顶部导航，包含阶段切换、通知、角色切换和设置面板。
@@ -277,6 +311,12 @@ LLM_PROVIDER=http-template
 
 - `app/server/state-store.mjs`
   运行态持久化逻辑。
+
+- `app/server/ontology-validation.mjs`
+  本体验证 mock 引擎，用于本体团队接入前的接口联调与规则校验演示。
+
+- `app/server/docs/integration-contracts.md`
+  知识库、LLM、本体验证 provider 的外部服务对接契约。
 
 ## 仓库地址
 
