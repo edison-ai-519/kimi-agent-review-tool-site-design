@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Network, Search, Target, TrendingUp, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Network, Target, TrendingUp, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { ContextVector, OntologyData, OntologyNode } from '@/types';
@@ -10,15 +9,13 @@ import type { ContextVector, OntologyData, OntologyNode } from '@/types';
 interface OntologyTreeItemProps {
   node: OntologyNode;
   level: number;
-  searchQuery: string;
   highlightedPath: string[];
 }
 
-function OntologyTreeItem({ node, level, searchQuery, highlightedPath }: OntologyTreeItemProps) {
+function OntologyTreeItem({ node, level, highlightedPath }: OntologyTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(level < 1);
   const hasChildren = (node.children?.length ?? 0) > 0;
   const isHighlighted = highlightedPath.includes(node.id);
-  const matchesSearch = searchQuery.trim().length > 0 && node.name.toLowerCase().includes(searchQuery.toLowerCase());
 
   return (
     <div className="select-none">
@@ -29,8 +26,7 @@ function OntologyTreeItem({ node, level, searchQuery, highlightedPath }: Ontolog
         className={cn(
           'flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
           'cursor-pointer hover:bg-muted/50',
-          isHighlighted && 'bg-blue-500/10 ring-1 ring-blue-500/40',
-          matchesSearch && 'bg-amber-500/10'
+          isHighlighted && 'bg-blue-500/10 ring-1 ring-blue-500/40'
         )}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={() => {
@@ -77,7 +73,6 @@ function OntologyTreeItem({ node, level, searchQuery, highlightedPath }: Ontolog
                 key={child.id}
                 node={child}
                 level={level + 1}
-                searchQuery={searchQuery}
                 highlightedPath={highlightedPath}
               />
             ))}
@@ -195,8 +190,6 @@ export function OntologyPanel({
   isCollapsed = false,
   onToggleCollapse
 }: OntologyPanelProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-
   if (isCollapsed) {
     return (
       <motion.div
@@ -240,23 +233,13 @@ export function OntologyPanel({
             <ChevronDown className="h-4 w-4" />
           </button>
         </div>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="搜索本体概念..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            className="h-9 pl-9 text-sm"
-          />
-        </div>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-2">
           <div className="mb-4">
             <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">领域本体树</div>
-            <OntologyTreeItem node={ontology.tree} level={0} searchQuery={searchQuery} highlightedPath={highlightedPath} />
+            <OntologyTreeItem node={ontology.tree} level={0} highlightedPath={highlightedPath} />
           </div>
 
           <div className="mb-4 rounded-lg bg-muted/30 p-3">

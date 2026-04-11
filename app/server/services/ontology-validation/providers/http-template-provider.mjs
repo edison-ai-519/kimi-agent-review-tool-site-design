@@ -1,10 +1,12 @@
 import {
+  normalizeOntologyContextVectors,
   normalizeOntologyValidationKnowledgeBase,
   normalizeOntologyValidationResult
 } from '../contracts.mjs';
 
 export function createHttpTemplateOntologyValidationProvider({ ontologyKnowledgeBase }) {
   const endpoint = process.env.ONTOLOGY_VALIDATION_ENDPOINT ?? '';
+  const contextVectorsEndpoint = process.env.ONTOLOGY_CONTEXT_VECTORS_ENDPOINT ?? endpoint;
   const apiKey = process.env.ONTOLOGY_VALIDATION_API_KEY ?? '';
   const namespace = process.env.ONTOLOGY_VALIDATION_NAMESPACE ?? 'default';
   const metadata = normalizeOntologyValidationKnowledgeBase(ontologyKnowledgeBase);
@@ -75,6 +77,42 @@ export function createHttpTemplateOntologyValidationProvider({ ontologyKnowledge
       return normalizeOntologyValidationResult(payload, {
         ontologyVersion: metadata.version
       });
+    },
+
+    async getContextVectors({
+      project,
+      stage,
+      reviewItems = [],
+      activeReviewItem = null,
+      fallbackVectors = []
+    }) {
+      if (!contextVectorsEndpoint) {
+        return normalizeOntologyContextVectors(fallbackVectors);
+      }
+
+      const response = await fetch(contextVectorsEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+        },
+        body: JSON.stringify({
+          project,
+          stage,
+          reviewItems,
+          activeReviewItem,
+          namespace,
+          ontologyKnowledgeBase: metadata,
+          task: 'context-vectors'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ontology context vectors provider request failed with status ${response.status}.`);
+      }
+
+      const payload = await response.json();
+      return normalizeOntologyContextVectors(payload?.vectors ?? payload, fallbackVectors);
     }
   };
 }

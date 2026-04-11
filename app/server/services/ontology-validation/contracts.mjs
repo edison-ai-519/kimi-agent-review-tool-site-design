@@ -12,6 +12,26 @@ export function normalizeOntologyValidationKnowledgeBase(payload) {
   };
 }
 
+function normalizeContextVectorValue(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, numericValue));
+}
+
+export function normalizeOntologyContextVectors(vectors, fallback = []) {
+  const source = Array.isArray(vectors) && vectors.length > 0 ? vectors : fallback;
+  return source
+    .map((vector) => ({
+      name: String(vector?.name ?? ''),
+      value: normalizeContextVectorValue(vector?.value),
+      color: String(vector?.color ?? '#3b82f6')
+    }))
+    .filter((vector) => vector.name);
+}
+
 export function normalizeOntologyValidationResult(result, fallback = {}) {
   return {
     status: normalizeSeverity(result?.status, fallback.status ?? 'warn'),

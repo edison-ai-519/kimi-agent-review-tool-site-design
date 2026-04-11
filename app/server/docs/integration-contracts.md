@@ -151,6 +151,7 @@ Runtime switch:
 Optional environment variables for the HTTP template provider:
 
 - `ONTOLOGY_VALIDATION_ENDPOINT`
+- `ONTOLOGY_CONTEXT_VECTORS_ENDPOINT`
 - `ONTOLOGY_VALIDATION_API_KEY`
 - `ONTOLOGY_VALIDATION_NAMESPACE`
 
@@ -244,9 +245,57 @@ Example response:
 }
 ```
 
+### Context vectors request
+
+When `/api/app-state` is assembled, the backend can also ask the ontology provider for dynamic context vectors. If `ONTOLOGY_CONTEXT_VECTORS_ENDPOINT` is not configured, the HTTP template provider reuses `ONTOLOGY_VALIDATION_ENDPOINT`.
+
+Example request payload:
+
+```json
+{
+  "project": {
+    "id": "project-001",
+    "name": "基于多模态学习的智能评审系统",
+    "stage": "proposal"
+  },
+  "stage": "proposal",
+  "reviewItems": [
+    {
+      "id": "1",
+      "title": "技术创新性",
+      "status": "reviewed",
+      "score": 27,
+      "maxScore": 30,
+      "comment": "建议补充对比实验。"
+    }
+  ],
+  "activeReviewItem": null,
+  "namespace": "default",
+  "ontologyKnowledgeBase": {
+    "id": "ontology-review-kb",
+    "name": "科研项目评审本体知识库",
+    "version": "1.0.0"
+  },
+  "task": "context-vectors"
+}
+```
+
+Expected response shape:
+
+```json
+{
+  "vectors": [
+    { "name": "需求本体", "value": 0.62, "color": "#3b82f6" },
+    { "name": "方案本体", "value": 0.41, "color": "#f97316" },
+    { "name": "风险本体", "value": 0.35, "color": "#ef4444" }
+  ]
+}
+```
+
 ### Current app behavior
 
 - The backend computes ontology validation for each review item before returning `/api/app-state`.
+- The backend computes ontology context vectors through the same ontology provider before returning `/api/app-state`, and falls back to seed vectors if the provider is unavailable.
 - The backend also computes `llmParticipation` for each review item, so the review card itself carries `ontologyValidation + LLM summary + relatedDocuments`.
 - `/api/chat` and `/api/llm/complete` now both inject knowledge-base retrieval results and ontology context before calling the LLM provider.
 - `/api/review-items/:id/reasoning` reuses the same review intelligence context, so reasoning output is also driven by ontology knowledge and LLM participation.

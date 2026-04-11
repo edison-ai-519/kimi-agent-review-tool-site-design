@@ -46,6 +46,7 @@
 - 支持知识库搜索
 - 支持推理依据、文档引用和本体路径展示
 - 支持本体验证 provider，`/api/app-state` 返回评审项时会带上 `ontologyValidation` 和 `llmParticipation`
+- 支持通过本体 provider 动态返回 `contextVectors`，用于后续接入真实本体服务后的情境联合向量展示
 - 当前默认 provider 仍为 mock，可切换为 HTTP 模板 provider
 
 ### 数据与持久化
@@ -273,6 +274,7 @@ ONTOLOGY_VALIDATION_PROVIDER=http-template
 `http-template` 支持读取：
 
 - `ONTOLOGY_VALIDATION_ENDPOINT`
+- `ONTOLOGY_CONTEXT_VECTORS_ENDPOINT`
 - `ONTOLOGY_VALIDATION_API_KEY`
 - `ONTOLOGY_VALIDATION_NAMESPACE`
 

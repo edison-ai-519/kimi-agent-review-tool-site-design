@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, Network, Search, Target, TrendingUp, X, Zap } from 'lucide-react';
+import { ChevronRight, Network, Target, TrendingUp, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { ContextVector, OntologyData, OntologyNode } from '@/types';
@@ -10,13 +9,11 @@ import type { ContextVector, OntologyData, OntologyNode } from '@/types';
 interface OntologyTreeItemProps {
   node: OntologyNode;
   level: number;
-  searchQuery: string;
 }
 
-function OntologyTreeItem({ node, level, searchQuery }: OntologyTreeItemProps) {
+function OntologyTreeItem({ node, level }: OntologyTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(level < 1);
   const hasChildren = (node.children?.length ?? 0) > 0;
-  const matchesSearch = searchQuery.trim().length > 0 && node.name.toLowerCase().includes(searchQuery.toLowerCase());
 
   return (
     <div className="select-none">
@@ -24,8 +21,7 @@ function OntologyTreeItem({ node, level, searchQuery }: OntologyTreeItemProps) {
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 1, x: 0 }}
         className={cn(
-          'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 active:bg-muted',
-          matchesSearch && 'bg-amber-500/10'
+          'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 active:bg-muted'
         )}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
         onClick={() => {
@@ -66,7 +62,7 @@ function OntologyTreeItem({ node, level, searchQuery }: OntologyTreeItemProps) {
             className="overflow-hidden"
           >
             {node.children?.map((child) => (
-              <OntologyTreeItem key={child.id} node={child} level={level + 1} searchQuery={searchQuery} />
+              <OntologyTreeItem key={child.id} node={child} level={level + 1} />
             ))}
           </motion.div>
         )}
@@ -176,7 +172,6 @@ interface MobileOntologyDrawerProps {
 }
 
 export function MobileOntologyDrawer({ isOpen, onClose, ontology }: MobileOntologyDrawerProps) {
-  const [searchQuery, setSearchQuery] = useState('');
   const [activeSection, setActiveSection] = useState<'tree' | 'vector' | 'recent'>('tree');
 
   return (
@@ -238,17 +233,8 @@ export function MobileOntologyDrawer({ isOpen, onClose, ontology }: MobileOntolo
               <div className="p-4">
                 {activeSection === 'tree' && (
                   <div>
-                    <div className="relative mb-4">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="搜索本体概念..."
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
                     <div className="space-y-1">
-                      <OntologyTreeItem node={ontology.tree} level={0} searchQuery={searchQuery} />
+                      <OntologyTreeItem node={ontology.tree} level={0} />
                     </div>
                   </div>
                 )}

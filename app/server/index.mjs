@@ -462,6 +462,22 @@ async function enrichReviewItem(item, stage) {
 async function buildAppStatePayload(stage = getCurrentStage()) {
   const stageSeed = reviewStageSeeds[stage];
   const reviewItems = await Promise.all(getReviewItems(stage).map((item) => enrichReviewItem(item, stage)));
+  const fallbackOntology = clone(appStateSeed.ontology);
+  let ontology = fallbackOntology;
+
+  try {
+    ontology = {
+      ...fallbackOntology,
+      contextVectors: await ontologyValidationClient.getContextVectors({
+        project: stageSeed.project,
+        stage,
+        reviewItems,
+        fallbackVectors: fallbackOntology.contextVectors
+      })
+    };
+  } catch {
+    ontology = fallbackOntology;
+  }
 
   return {
     ...clone(appStateSeed),
@@ -471,6 +487,7 @@ async function buildAppStatePayload(stage = getCurrentStage()) {
       lastUpdate: getLastUpdateIsoString(stage)
     },
     reviewItems,
+    ontology,
     activityFeed: getActivityFeed(stage),
     knowledgeBase: knowledgeBaseClient.getKnowledgeBase(),
     chatConfig: clone(stageSeed.chatConfig)
