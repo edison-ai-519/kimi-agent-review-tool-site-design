@@ -13,19 +13,15 @@ import {
   HelpCircle,
   History,
   Lock,
-  PanelRightClose,
-  PanelRightOpen,
   RotateCcw,
   Search,
-  Send,
   SlidersHorizontal,
   Sparkles,
-  Users
 } from 'lucide-react';
 import { RelatedDocumentsList } from '@/components/chat/RelatedDocumentsList';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,7 +29,16 @@ import { getReviewWorkspacePermissions, type ReviewWorkspacePermissions } from '
 import { buildStageRecommendation, getReviewStageConfig, getReviewStageStatusLabel, getStageAwareStatusLabel, reviewStageLabelMap } from '@/lib/review-stage';
 import { matchesReviewFilter, sortReviewItems, type ReviewListFilter, type ReviewListSort } from '@/lib/review';
 import { cn } from '@/lib/utils';
-import type { ChatConfig, ChatMessage, KnowledgeDocument, ProjectInfo, ReviewHistoryEntry, ReviewItem, ReviewStageOverview, ReviewStatus, UserRole } from '@/types';
+import type {
+  KnowledgeDocument,
+  ProjectInfo,
+  ReviewHistoryEntry,
+  ReviewItem,
+  ReviewItemOntologyValidation,
+  ReviewStageOverview,
+  ReviewStatus,
+  UserRole
+} from '@/types';
 
 const statusConfig = {
   draft: { color: 'text-slate-500', bg: 'bg-slate-500/10', icon: <FileText className="h-4 w-4" /> },
@@ -71,6 +76,12 @@ function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function compactText(value: string | undefined, maxLength = 120) {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
 function matchesReviewSearch(item: ReviewItem, search: string) {
   const query = search.trim().toLowerCase();
   return !query || [item.title, item.description, item.comment ?? ''].join(' ').toLowerCase().includes(query);
@@ -90,6 +101,147 @@ function HistorySection({ entries, isLoading }: { entries: ReviewHistoryEntry[];
           <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{entry.summary}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+const ontologyValidationConfig = {
+  pass: {
+    label: '本体校验通过',
+    badgeClassName: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+    panelClassName: 'border-emerald-500/20 bg-emerald-500/5'
+  },
+  warn: {
+    label: '本体待补充',
+    badgeClassName: 'border-amber-500/30 bg-amber-500/10 text-amber-700',
+    panelClassName: 'border-amber-500/20 bg-amber-500/5'
+  },
+  fail: {
+    label: '本体高风险',
+    badgeClassName: 'border-rose-500/30 bg-rose-500/10 text-rose-700',
+    panelClassName: 'border-rose-500/20 bg-rose-500/5'
+  }
+} as const;
+
+const llmParticipationBadgeClassName = 'border-blue-500/30 bg-blue-500/10 text-blue-700';
+
+function OntologyValidationPanel({ validation }: { validation?: ReviewItemOntologyValidation }) {
+  if (!validation) return null;
+  const config = ontologyValidationConfig[validation.status];
+
+  return (
+    <div className={cn('rounded-xl border p-3', config.panelClassName)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className={cn('text-xs', config.badgeClassName)}>
+          {config.label}
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          本体版本 {validation.ontologyVersion}
+        </Badge>
+      </div>
+      <div className="mt-3 text-sm font-medium">本体规则校验</div>
+      <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{validation.summary}</div>
+
+      {validation.matchedConcepts.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {validation.matchedConcepts.map((concept) => (
+            <Badge key={concept} variant="secondary" className="bg-background/80 text-xs">
+              {concept}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {validation.evidenceChecks.length > 0 && (
+        <div className="mt-4 grid gap-2">
+          {validation.evidenceChecks.map((check) => (
+            <div key={check.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm font-medium">{check.label}</div>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px]',
+                    check.matched
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+                  )}
+                >
+                  {check.matched ? '已命中' : '未命中'}
+                </Badge>
+              </div>
+              <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {check.matched
+                  ? `命中来源：${
+                      check.matchedIn === 'both'
+                        ? '评审意见 + 知识库'
+                        : check.matchedIn === 'comment'
+                          ? '评审意见'
+                          : '知识库'
+                    }`
+                  : '当前评审意见和检索资料都没有覆盖这条证据要求。'}
+              </div>
+              {check.matchedTerms.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {check.matchedTerms.slice(0, 4).map((term) => (
+                    <span key={term} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {term}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {validation.findings.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {validation.findings.map((finding) => (
+            <div key={finding.id} className="rounded-lg border border-border/50 bg-background/80 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn('text-[10px]', ontologyValidationConfig[finding.severity].badgeClassName)}
+                >
+                  {finding.severityLabel}
+                </Badge>
+                <div className="text-sm font-medium">{finding.title}</div>
+              </div>
+              <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{finding.message}</div>
+              {finding.suggestion && (
+                <div className="mt-2 text-xs leading-relaxed text-foreground/80">建议动作：{finding.suggestion}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LlmParticipationPanel({ participation }: { participation?: ReviewItem['llmParticipation'] }) {
+  if (!participation) return null;
+
+  return (
+    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className={cn('text-xs', llmParticipationBadgeClassName)}>
+          LLM 已参与评审
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          {participation.provider} / {participation.model}
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          {participation.useCase}
+        </Badge>
+      </div>
+      <div className="mt-3 text-sm font-medium">LLM 评审建议</div>
+      <div className="mt-1 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+        {participation.summary}
+      </div>
+      <div className="mt-3 text-[11px] text-muted-foreground">生成时间：{formatTime(participation.createdAt)}</div>
+      <RelatedDocumentsList documents={participation.relatedDocuments} title="LLM 参考资料" />
     </div>
   );
 }
@@ -140,68 +292,6 @@ function StageOverviewPanel({ currentStage, stageOverview }: { currentStage: Pro
   );
 }
 
-function AgentChat({
-  messages,
-  chatConfig,
-  isPending,
-  activeReviewItem,
-  isDisabled,
-  disabledMessage,
-  onSendMessage
-}: {
-  messages: ChatMessage[];
-  chatConfig: ChatConfig;
-  isPending: boolean;
-  activeReviewItem?: ReviewItem | null;
-  isDisabled: boolean;
-  disabledMessage?: string;
-  onSendMessage: (message: string) => void;
-}) {
-  const [input, setInput] = useState('');
-  return (
-    <Card className="flex h-full flex-col">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-blue-500" />评审助手</CardTitle>
-        <div className="text-xs text-muted-foreground">{activeReviewItem ? `当前聚焦：${activeReviewItem.title}` : '当前为全局问答'}</div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col p-0">
-        <ScrollArea className="flex-1 px-4">
-          <div className="space-y-4 py-2">
-            {messages.map((message) => (
-              <div key={message.id} className={cn('flex gap-3', message.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
-                <div className={cn('flex h-8 w-8 items-center justify-center rounded-full', message.role === 'user' ? 'bg-blue-500' : 'bg-gradient-to-br from-blue-500 to-purple-500')}>
-                  {message.role === 'user' ? <Users className="h-4 w-4 text-white" /> : <Sparkles className="h-4 w-4 text-white" />}
-                </div>
-                <div className="max-w-[80%]">
-                  <div className={cn('rounded-2xl px-4 py-2 text-sm', message.role === 'user' ? 'rounded-br-md bg-blue-500 text-white' : 'rounded-bl-md bg-muted')}>
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  </div>
-                  {message.role === 'assistant' && <RelatedDocumentsList documents={message.relatedDocuments} compact className="bg-background/90" />}
-                </div>
-              </div>
-            ))}
-            {isPending && <div className="text-sm text-muted-foreground">评审助手正在整理答案...</div>}
-          </div>
-        </ScrollArea>
-        <div className="border-t border-border/50 p-4">
-          {isDisabled && disabledMessage && <div className="mb-3 rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">{disabledMessage}</div>}
-          <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-            {chatConfig.quickActions.map((action) => (
-              <button key={action} onClick={() => setInput(action)} disabled={isDisabled} className="whitespace-nowrap rounded-full bg-muted px-3 py-1 text-xs transition-colors hover:bg-muted/80">{action}</button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input value={input} onChange={(event) => setInput(event.target.value)} placeholder="输入当前阶段问题" disabled={isDisabled} />
-            <Button size="icon" disabled={isDisabled || isPending || !input.trim()} onClick={() => { if (!input.trim()) return; onSendMessage(input); setInput(''); }}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function ReviewCard({
   item,
   stage,
@@ -233,6 +323,8 @@ function ReviewCard({
 }) {
   const config = getReviewStageConfig(stage);
   const status = statusConfig[item.status];
+  const ontologyValidation = item.ontologyValidation;
+  const llmParticipation = item.llmParticipation;
   const [draftScore, setDraftScore] = useState(item.score?.toString() ?? '');
   const [draftComment, setDraftComment] = useState(item.comment ?? '');
   const [draftStatus, setDraftStatus] = useState<ReviewStatus>(item.status);
@@ -247,8 +339,26 @@ function ReviewCard({
             <div className="mb-1 flex items-center gap-2">
               <div className="font-semibold">{item.title}</div>
               <Badge variant="secondary" className={cn('text-xs', status.color, status.bg)}>{getStageAwareStatusLabel(stage, item.status)}</Badge>
+              {ontologyValidation && (
+                <Badge variant="outline" className={cn('text-xs', ontologyValidationConfig[ontologyValidation.status].badgeClassName)}>
+                  {ontologyValidationConfig[ontologyValidation.status].label}
+                </Badge>
+              )}
+              {llmParticipation && (
+                <Badge variant="outline" className={cn('text-xs', llmParticipationBadgeClassName)}>
+                  LLM 已参与
+                </Badge>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">{item.description}</div>
+            {ontologyValidation && (
+              <div className="mt-2 text-xs leading-relaxed text-muted-foreground">{ontologyValidation.summary}</div>
+            )}
+            {llmParticipation && (
+              <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {compactText(llmParticipation.summary, 140)}
+              </div>
+            )}
           </div>
           <motion.div animate={{ rotate: expanded ? 90 : 0 }}><ChevronRight className="h-5 w-5 text-muted-foreground" /></motion.div>
         </div>
@@ -258,6 +368,8 @@ function ReviewCard({
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden px-4 pb-4">
             <div className="space-y-4 border-t border-border/50 pt-4">
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">{permissions.summary}</div>
+              <OntologyValidationPanel validation={ontologyValidation} />
+              <LlmParticipationPanel participation={llmParticipation} />
               <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
                 <div className="flex items-center gap-3">
                   <div className="text-sm font-medium">评分</div>
@@ -303,47 +415,35 @@ function ReviewCard({
 export function ReviewWorkspace({
   project,
   reviewItems,
-  chatMessages,
-  chatConfig,
   reviewHistoryByItem,
   generatedReferencesByItem,
   stageOverview = [],
   userRole = 'expert',
   permissions,
-  isChatPending = false,
   savingItemId = null,
   generatingItemId = null,
   historyLoadingItemId = null,
-  activeReviewItem = null,
   isReasoningVisible = false,
-  autoHideAssistantOnReasoning = true,
   onShowReasoning,
   onLoadHistory,
   onActiveReviewItemChange,
-  onSendChat,
   onSaveReviewItem,
   onGenerateComment
 }: {
   project: ProjectInfo;
   reviewItems: ReviewItem[];
-  chatMessages: ChatMessage[];
-  chatConfig: ChatConfig;
   reviewHistoryByItem: Record<string, ReviewHistoryEntry[]>;
   generatedReferencesByItem: Record<string, KnowledgeDocument[]>;
   stageOverview?: ReviewStageOverview[];
   userRole?: UserRole;
   permissions?: ReviewWorkspacePermissions;
-  isChatPending?: boolean;
   savingItemId?: string | null;
   generatingItemId?: string | null;
   historyLoadingItemId?: string | null;
-  activeReviewItem?: ReviewItem | null;
   isReasoningVisible?: boolean;
-  autoHideAssistantOnReasoning?: boolean;
   onShowReasoning?: (item: ReviewItem) => void;
   onLoadHistory?: (itemId: string) => Promise<unknown> | void;
   onActiveReviewItemChange?: (itemId: string | null) => void;
-  onSendChat: (message: string, itemId?: string) => void;
   onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
   onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
 }) {
@@ -351,13 +451,11 @@ export function ReviewWorkspace({
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ReviewListFilter>('all');
   const [sortBy, setSortBy] = useState<ReviewListSort>('priority');
-  const [assistantVisible, setAssistantVisible] = useState(true);
   const resolvedPermissions = permissions ?? getReviewWorkspacePermissions(userRole);
   const stageConfig = getReviewStageConfig(project.stage);
   const completedCount = reviewItems.filter((item) => item.status === 'reviewed').length;
   const progressPercent = reviewItems.length === 0 ? 0 : (completedCount / reviewItems.length) * 100;
   const filteredItems = useMemo(() => sortReviewItems(reviewItems.filter((item) => matchesReviewFilter(item, filter) && matchesReviewSearch(item, search)), sortBy), [filter, reviewItems, search, sortBy]);
-  const shouldShowAssistant = assistantVisible && (!isReasoningVisible || !autoHideAssistantOnReasoning);
 
   return (
     <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="flex h-full min-w-0 flex-col overflow-hidden">
@@ -394,58 +492,57 @@ export function ReviewWorkspace({
         </CardContent>
       </Card>
 
-      <div className={cn('grid flex-1 gap-4 overflow-hidden', shouldShowAssistant ? 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem]' : 'grid-cols-1')}>
-        <div className="min-w-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            <div className="space-y-3 pb-4 pr-4">
-              <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-5 w-5 text-blue-500" />评审要点清单</div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{stageConfig.progressLabel}</span>
-                    <div className="h-2 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-blue-500" style={{ width: `${progressPercent}%` }} /></div>
-                    <span>{completedCount}/{reviewItems.length}</span>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-                  <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索评审项标题、说明或意见" className="pl-9" /></div>
-                  <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-muted-foreground" /><select value={sortBy} onChange={(event) => setSortBy(event.target.value as ReviewListSort)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">{sortOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></div>
-                  <div className="hidden justify-end lg:flex"><Button variant="outline" size="sm" className="gap-2" onClick={() => setAssistantVisible((current) => !current)}>{shouldShowAssistant ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}{shouldShowAssistant ? '收起助手' : '显示助手'}</Button></div>
-                </div>
-                {isReasoningVisible && autoHideAssistantOnReasoning && <div className="mt-3 hidden rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground lg:block">推理依据面板已打开，评审助手已自动收起。</div>}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {filterOptions.map((option) => <button key={option.id} onClick={() => setFilter(option.id)} className={cn('rounded-full border px-3 py-1.5 text-xs transition-colors', filter === option.id ? 'border-blue-500 bg-blue-500/10 text-blue-600' : 'border-border/60 bg-background text-muted-foreground hover:bg-muted/50')}>{option.label}</button>)}
-                  <div className="ml-auto text-xs text-muted-foreground">当前显示 {filteredItems.length} / {reviewItems.length}</div>
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="space-y-3 pb-4 pr-4">
+            <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-5 w-5 text-blue-500" />评审要点清单</div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{stageConfig.progressLabel}</span>
+                  <div className="h-2 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-blue-500" style={{ width: `${progressPercent}%` }} /></div>
+                  <span>{completedCount}/{reviewItems.length}</span>
                 </div>
               </div>
-
-              {filteredItems.length === 0 && <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-8 text-center text-sm text-muted-foreground">当前筛选条件下没有匹配的评审项。</div>}
-
-              {filteredItems.map((item) => (
-                <ReviewCard
-                  key={`${item.id}:${item.status}:${item.updatedAt ?? 'seed'}`}
-                  item={item}
-                  stage={project.stage}
-                  permissions={resolvedPermissions}
-                  expanded={expandedItem === item.id}
-                  isSaving={savingItemId === item.id}
-                  isGenerating={generatingItemId === item.id}
-                  isHistoryLoading={historyLoadingItemId === item.id}
-                  historyEntries={reviewHistoryByItem[item.id] ?? []}
-                  generatedReferences={generatedReferencesByItem[item.id] ?? []}
-                  onToggle={() => setExpandedItem((current) => { const next = current === item.id ? null : item.id; if (next) void onLoadHistory?.(item.id); onActiveReviewItemChange?.(next); return next; })}
-                  onShowReasoning={() => onShowReasoning?.(item)}
-                  onSave={onSaveReviewItem}
-                  onGenerateComment={onGenerateComment}
-                />
-              ))}
-
-              <StageOverviewPanel currentStage={project.stage} stageOverview={stageOverview} />
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索评审项标题、说明或意见" className="pl-9" /></div>
+                <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-muted-foreground" /><select value={sortBy} onChange={(event) => setSortBy(event.target.value as ReviewListSort)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">{sortOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></div>
+              </div>
+              {isReasoningVisible && (
+                <div className="mt-3 hidden rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground lg:block">
+                  右侧推理依据面板已打开，主工作区会保持完整宽度；聊天请使用右下角悬浮评审助手。
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {filterOptions.map((option) => <button key={option.id} onClick={() => setFilter(option.id)} className={cn('rounded-full border px-3 py-1.5 text-xs transition-colors', filter === option.id ? 'border-blue-500 bg-blue-500/10 text-blue-600' : 'border-border/60 bg-background text-muted-foreground hover:bg-muted/50')}>{option.label}</button>)}
+                <div className="ml-auto text-xs text-muted-foreground">当前显示 {filteredItems.length} / {reviewItems.length}</div>
+              </div>
             </div>
-          </ScrollArea>
-        </div>
 
-        {shouldShowAssistant && <div className="hidden min-w-0 lg:block"><AgentChat messages={chatMessages} chatConfig={chatConfig} isPending={isChatPending} activeReviewItem={activeReviewItem} isDisabled={!resolvedPermissions.canUseChat} disabledMessage="当前角色不允许直接向评审助手发起对话，你仍然可以查看历史消息和引用资料。" onSendMessage={(message) => onSendChat(message, activeReviewItem?.id)} /></div>}
+            {filteredItems.length === 0 && <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-8 text-center text-sm text-muted-foreground">当前筛选条件下没有匹配的评审项。</div>}
+
+            {filteredItems.map((item) => (
+              <ReviewCard
+                key={`${item.id}:${item.status}:${item.updatedAt ?? 'seed'}`}
+                item={item}
+                stage={project.stage}
+                permissions={resolvedPermissions}
+                expanded={expandedItem === item.id}
+                isSaving={savingItemId === item.id}
+                isGenerating={generatingItemId === item.id}
+                isHistoryLoading={historyLoadingItemId === item.id}
+                historyEntries={reviewHistoryByItem[item.id] ?? []}
+                generatedReferences={generatedReferencesByItem[item.id] ?? []}
+                onToggle={() => setExpandedItem((current) => { const next = current === item.id ? null : item.id; if (next) void onLoadHistory?.(item.id); onActiveReviewItemChange?.(next); return next; })}
+                onShowReasoning={() => onShowReasoning?.(item)}
+                onSave={onSaveReviewItem}
+                onGenerateComment={onGenerateComment}
+              />
+            ))}
+
+            <StageOverviewPanel currentStage={project.stage} stageOverview={stageOverview} />
+          </div>
+        </ScrollArea>
       </div>
     </motion.div>
   );

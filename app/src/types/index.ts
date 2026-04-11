@@ -45,6 +45,8 @@ export interface ReviewItem {
   comment?: string;
   updatedAt?: string;
   reasoning?: ReasoningChain;
+  ontologyValidation?: ReviewItemOntologyValidation;
+  llmParticipation?: ReviewItemLlmParticipation;
 }
 
 // Reasoning chain
@@ -129,7 +131,6 @@ export interface ReviewStats {
 export interface DesktopUiPreferences {
   showFloatingChat: boolean;
   showBottomStatusBar: boolean;
-  autoHideAssistantOnReasoning: boolean;
 }
 
 export interface ReviewHistoryEntry {
@@ -174,6 +175,47 @@ export interface KnowledgeBase {
   description: string;
   updatedAt: string;
   documents: KnowledgeDocument[];
+}
+
+export type OntologyValidationStatus = 'pass' | 'warn' | 'fail';
+
+export interface OntologyValidationEvidenceCheck {
+  id: string;
+  label: string;
+  matched: boolean;
+  matchedIn: 'comment' | 'knowledge' | 'both' | 'none';
+  matchedTerms: string[];
+}
+
+export interface OntologyValidationFinding {
+  id: string;
+  severity: OntologyValidationStatus;
+  severityLabel: string;
+  title: string;
+  message: string;
+  suggestion?: string;
+}
+
+export interface ReviewItemOntologyValidation {
+  status: OntologyValidationStatus;
+  summary: string;
+  ontologyVersion: string;
+  ontologyPathLabels: string[];
+  matchedConcepts: string[];
+  matchedDocumentCategories: string[];
+  missingDocumentCategories: string[];
+  evidenceChecks: OntologyValidationEvidenceCheck[];
+  findings: OntologyValidationFinding[];
+  knowledgeDocumentIds: string[];
+}
+
+export interface ReviewItemLlmParticipation {
+  provider: string;
+  model: string;
+  useCase: string;
+  createdAt: string;
+  summary: string;
+  relatedDocuments: KnowledgeDocument[];
 }
 
 export interface KnowledgeSearchResult {

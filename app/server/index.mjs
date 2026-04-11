@@ -17,17 +17,25 @@ import {
 } from './review-stages.mjs';
 import { createKnowledgeBaseClient, listKnowledgeBaseProviders } from './services/knowledge-base/index.mjs';
 import { createLlmClient, listLlmProviders } from './services/llm/index.mjs';
+import {
+  createOntologyValidationClient,
+  listOntologyValidationProviders
+} from './services/ontology-validation/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.join(__dirname, 'data');
 
 const appStateSeed = readJson('app-state.json');
+const ontologyKnowledgeBase = readJson('ontology-knowledge-base.json');
 const reasoningSeedMap = readJson('reasoning-map.json');
 const knowledgeBaseClient = createKnowledgeBaseClient({
   knowledgeBase: readJson('knowledge-base.json')
 });
 const llmClient = createLlmClient();
+const ontologyValidationClient = createOntologyValidationClient({
+  ontologyKnowledgeBase
+});
 const reviewStageSeeds = createStageSeeds(appStateSeed);
 const stateStore = createStateStore({
   dataDir,
@@ -213,8 +221,247 @@ function buildActivity(action, target, type) {
   };
 }
 
-function getAppStatePayload(stage = getCurrentStage()) {
+function getOntologyPathLabels(itemId) {
+  return reasoningSeedMap[itemId]?.ontologyPathLabels ?? getStageItemContext(itemId)?.ontologyPathLabels ?? [];
+}
+
+function normalizeOntologySearchText(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function getOntologyProfile(stage, itemId) {
+  return (
+    ontologyKnowledgeBase.reviewProfiles?.find(
+      (profile) => profile.stage === stage && Array.isArray(profile.itemIds) && profile.itemIds.includes(itemId)
+    ) ?? null
+  );
+}
+
+function getOntologyLabelsByIds(items, ids = []) {
+  return ids
+    .map((id) => items.find((item) => item.id === id)?.label)
+    .filter(Boolean);
+}
+
+function buildOntologyContext(stage, { prompt = '', item = null, ontologyPathLabels = [] } = {}) {
+  const searchText = normalizeOntologySearchText(
+    [prompt, item?.title, item?.description, item?.comment, ontologyPathLabels].flat().filter(Boolean).join(' ')
+  );
+
+  const matchedConcepts = (ontologyKnowledgeBase.concepts ?? [])
+    .filter((concept) =>
+      [concept.label, ...(Array.isArray(concept.aliases) ? concept.aliases : [])]
+        .map((term) => normalizeOntologySearchText(term))
+        .some((term) => term && searchText.includes(term))
+    )
+    .slice(0, 6)
+    .map((concept) => concept.label);
+
+  const matchedEvidencePatterns = (ontologyKnowledgeBase.evidencePatterns ?? [])
+    .filter((pattern) =>
+      (Array.isArray(pattern.keywords) ? pattern.keywords : [])
+        .map((term) => normalizeOntologySearchText(term))
+        .some((term) => term && searchText.includes(term))
+    )
+    .slice(0, 4)
+    .map((pattern) => pattern.label);
+
+  const profile = item ? getOntologyProfile(stage, item.id) : null;
+  const requiredConcepts = profile
+    ? getOntologyLabelsByIds(ontologyKnowledgeBase.concepts ?? [], profile.conceptIds ?? [])
+    : [];
+  const requiredEvidence = profile
+    ? getOntologyLabelsByIds(ontologyKnowledgeBase.evidencePatterns ?? [], profile.requiredEvidenceIds ?? [])
+    : [];
+  const requiredDocumentCategories = profile?.requiredDocumentCategories ?? [];
+
+  const contextLines = [
+    `本体知识库版本：${ontologyKnowledgeBase.version}`,
+    matchedConcepts.length > 0 ? `本体命中概念：${matchedConcepts.join('、')}` : null,
+    matchedEvidencePatterns.length > 0 ? `本体命中证据模式：${matchedEvidencePatterns.join('、')}` : null,
+    requiredConcepts.length > 0 ? `本体规则关注概念：${requiredConcepts.join('、')}` : null,
+    requiredEvidence.length > 0 ? `本体规则要求证据：${requiredEvidence.join('、')}` : null,
+    requiredDocumentCategories.length > 0 ? `本体规则要求资料类型：${requiredDocumentCategories.join('、')}` : null,
+    ontologyPathLabels.length > 0 ? `本体路径：${ontologyPathLabels.join(' -> ')}` : null
+  ].filter(Boolean);
+
+  return {
+    matchedConcepts,
+    matchedEvidencePatterns,
+    requiredConcepts,
+    requiredEvidence,
+    requiredDocumentCategories,
+    contextLines
+  };
+}
+
+async function buildReviewItemOntologyValidation(item, stage) {
+  const ontologyPathLabels = getOntologyPathLabels(item.id);
+  try {
+    const knowledgeSearch = await resolveKnowledgeSearch({
+      query: item.title,
+      itemId: item.id,
+      limit: 4,
+      ontologyPathLabels
+    });
+
+    return ontologyValidationClient.validateReviewItem({
+      item,
+      stage,
+      knowledgeDocuments: knowledgeSearch.documents,
+      ontologyPathLabels
+    });
+  } catch (error) {
+    return {
+      status: 'warn',
+      summary: '本体规则校验已降级执行，当前知识库检索异常，建议稍后重新校验。',
+      ontologyVersion: ontologyValidationClient.getKnowledgeBase().version,
+      ontologyPathLabels,
+      matchedConcepts: [],
+      matchedDocumentCategories: [],
+      missingDocumentCategories: [],
+      evidenceChecks: [],
+      findings: [
+        {
+          id: `finding-${item.id}-ontology-validation-error`,
+          severity: 'warn',
+          severityLabel: '待补充',
+          title: '知识库检索异常',
+          message: error instanceof Error ? error.message : '知识库检索失败，当前只返回降级提示。',
+          suggestion: '检查知识库 provider 状态后重新进入该评审项。'
+        }
+      ],
+      knowledgeDocumentIds: []
+    };
+  }
+}
+
+async function buildReviewItemLlmParticipation({
+  item,
+  stage,
+  ontologyValidation,
+  knowledgeDocuments,
+  ontologyPathLabels
+}) {
+  const ontologyContext = buildOntologyContext(stage, {
+    prompt: [item.title, item.description, item.comment ?? ''].filter(Boolean).join(' '),
+    item,
+    ontologyPathLabels
+  });
+
+  try {
+    const completion = await llmClient.complete({
+      prompt: `请基于本体规则、知识库材料和当前评审状态，对“${item.title}”生成一段评审辅助建议，包含结论、依据、缺口和下一步动作。`,
+      useCase: 'review-evaluation',
+      context: [
+        `当前评审阶段：${REVIEW_STAGE_LABELS[stage]}`,
+        `当前评审状态：${getStageReviewStatusLabel(stage, item.status)}`,
+        typeof item.score === 'number' ? `当前评分：${item.score}/${item.maxScore}` : null,
+        item.comment ? `当前评审意见：${item.comment}` : '当前尚未填写正式评审意见。',
+        `本体校验结论：${ontologyValidation.summary}`,
+        ontologyValidation.findings.length > 0
+          ? `本体校验重点：${ontologyValidation.findings.map((finding) => finding.title).join('；')}`
+          : '本体校验重点：当前未发现阻塞性问题。',
+        ...ontologyContext.contextLines
+      ].filter(Boolean),
+      knowledgeDocuments,
+      metadata: {
+        stage,
+        stageLabel: REVIEW_STAGE_LABELS[stage],
+        reviewItemId: item.id,
+        reviewItemTitle: item.title,
+        ontologyValidationStatus: ontologyValidation.status,
+        ontologyKnowledgeBaseVersion: ontologyKnowledgeBase.version,
+        ontologyMatchedConcepts: ontologyContext.matchedConcepts,
+        ontologyRequiredEvidence: ontologyContext.requiredEvidence
+      }
+    });
+
+    return {
+      provider: completion.provider,
+      model: completion.model,
+      useCase: completion.useCase,
+      createdAt: completion.createdAt,
+      summary: completion.text,
+      relatedDocuments: completion.relatedDocuments ?? knowledgeDocuments
+    };
+  } catch (error) {
+    return {
+      provider: llmClient.name,
+      model: process.env.LLM_MODEL ?? 'unknown',
+      useCase: 'review-evaluation',
+      createdAt: new Date().toISOString(),
+      summary:
+        error instanceof Error
+          ? `LLM 参与评审建议生成失败：${error.message}`
+          : 'LLM 参与评审建议生成失败，请稍后重试。',
+      relatedDocuments: knowledgeDocuments
+    };
+  }
+}
+
+async function buildReviewItemIntelligence(item, stage) {
+  const ontologyPathLabels = getOntologyPathLabels(item.id);
+  const knowledgeSearch = await resolveKnowledgeSearch({
+    query: [item.title, item.description, item.comment ?? ''].filter(Boolean).join(' '),
+    itemId: item.id,
+    limit: 4,
+    ontologyPathLabels
+  });
+
+  const ontologyValidation = await ontologyValidationClient.validateReviewItem({
+    item,
+    stage,
+    knowledgeDocuments: knowledgeSearch.documents,
+    ontologyPathLabels
+  });
+
+  const llmParticipation = await buildReviewItemLlmParticipation({
+    item,
+    stage,
+    ontologyValidation,
+    knowledgeDocuments: knowledgeSearch.documents,
+    ontologyPathLabels
+  });
+
+  return {
+    ontologyValidation,
+    llmParticipation,
+    knowledgeDocuments: knowledgeSearch.documents,
+    ontologyPathLabels
+  };
+}
+
+async function enrichReviewItem(item, stage) {
+  try {
+    const intelligence = await buildReviewItemIntelligence(item, stage);
+    return {
+      ...clone(item),
+      ontologyValidation: intelligence.ontologyValidation,
+      llmParticipation: intelligence.llmParticipation
+    };
+  } catch (error) {
+    return {
+      ...clone(item),
+      ontologyValidation: await buildReviewItemOntologyValidation(item, stage),
+      llmParticipation: {
+        provider: llmClient.name,
+        model: process.env.LLM_MODEL ?? 'unknown',
+        useCase: 'review-evaluation',
+        createdAt: new Date().toISOString(),
+        summary:
+          error instanceof Error
+            ? `LLM 参与评审建议生成失败：${error.message}`
+            : 'LLM 参与评审建议生成失败，请稍后重试。',
+        relatedDocuments: []
+      }
+    };
+  }
+}
+
+async function buildAppStatePayload(stage = getCurrentStage()) {
   const stageSeed = reviewStageSeeds[stage];
+  const reviewItems = await Promise.all(getReviewItems(stage).map((item) => enrichReviewItem(item, stage)));
 
   return {
     ...clone(appStateSeed),
@@ -223,7 +470,7 @@ function getAppStatePayload(stage = getCurrentStage()) {
       ...clone(appStateSeed.systemStatus),
       lastUpdate: getLastUpdateIsoString(stage)
     },
-    reviewItems: getReviewItems(stage),
+    reviewItems,
     activityFeed: getActivityFeed(stage),
     knowledgeBase: knowledgeBaseClient.getKnowledgeBase(),
     chatConfig: clone(stageSeed.chatConfig)
@@ -419,14 +666,8 @@ async function buildReasoningPayload(itemId) {
     return null;
   }
 
-  const knowledgeSearch = await resolveKnowledgeSearch({
-    query: reviewItemState.item.title,
-    itemId,
-    limit: 3,
-    ontologyPathLabels: seed.ontologyPathLabels
-  });
-
-  const knowledgeDocuments = knowledgeSearch.documents.map((document, index) =>
+  const intelligence = await buildReviewItemIntelligence(reviewItemState.item, reviewItemState.stage);
+  const knowledgeDocuments = intelligence.knowledgeDocuments.map((document, index) =>
     knowledgeBaseClient.toDocumentFragment(document, {
       terms: [reviewItemState.item.title, reviewItemState.item.description, seed.ontologyPathLabels],
       relevance: Math.max(0.7, 0.96 - index * 0.08)
@@ -437,6 +678,7 @@ async function buildReasoningPayload(itemId) {
     ...clone(seed),
     chain: {
       ...clone(seed.chain),
+      conclusion: intelligence.llmParticipation.summary || clone(seed.chain.conclusion),
       documents: knowledgeDocuments.length > 0 ? knowledgeDocuments : clone(seed.chain.documents)
     }
   };
@@ -448,12 +690,25 @@ async function buildAiResponse({ prompt, itemId, stage, useCase = 'general', con
   const ontologyPathLabels = itemId
     ? reasoningSeedMap[itemId]?.ontologyPathLabels ?? getStageItemContext(itemId)?.ontologyPathLabels ?? []
     : [];
+  const ontologyContext = buildOntologyContext(resolvedStage, {
+    prompt,
+    item: reviewItemState?.item ?? null,
+    ontologyPathLabels
+  });
   const knowledgeSearch = await resolveKnowledgeSearch({
     query: prompt,
     itemId,
     limit: 3,
     ontologyPathLabels
   });
+  const ontologyValidation = reviewItemState
+    ? await ontologyValidationClient.validateReviewItem({
+        item: reviewItemState.item,
+        stage: resolvedStage,
+        knowledgeDocuments: knowledgeSearch.documents,
+        ontologyPathLabels
+      })
+    : null;
 
   return llmClient.complete({
     prompt,
@@ -463,14 +718,19 @@ async function buildAiResponse({ prompt, itemId, stage, useCase = 'general', con
       ...context,
       reviewItemState ? `评审项：${reviewItemState.item.title}` : null,
       reviewItemState?.item.description ?? null,
-      ontologyPathLabels.length > 0 ? `本体路径：${ontologyPathLabels.join(' -> ')}` : null
+      ontologyValidation ? `本体校验：${ontologyValidation.summary}` : null,
+      ontologyValidation?.findings?.length ? `本体关注点：${ontologyValidation.findings.map((finding) => finding.title).join('；')}` : null,
+      ...ontologyContext.contextLines
     ].filter(Boolean),
     knowledgeDocuments: knowledgeSearch.documents,
     metadata: {
       stage: resolvedStage,
       stageLabel: REVIEW_STAGE_LABELS[resolvedStage],
       reviewItemId: reviewItemState?.item.id,
-      reviewItemTitle: reviewItemState?.item.title
+      reviewItemTitle: reviewItemState?.item.title,
+      ontologyKnowledgeBaseVersion: ontologyKnowledgeBase.version,
+      ontologyMatchedConcepts: ontologyContext.matchedConcepts,
+      ontologyRequiredEvidence: ontologyContext.requiredEvidence
     }
   });
 }
@@ -554,8 +814,10 @@ const server = http.createServer(async (req, res) => {
         integrations: {
           knowledgeBaseProvider: knowledgeBaseClient.name,
           llmProvider: llmClient.name,
+          ontologyValidationProvider: ontologyValidationClient.name,
           availableKnowledgeBaseProviders: listKnowledgeBaseProviders(),
-          availableLlmProviders: listLlmProviders()
+          availableLlmProviders: listLlmProviders(),
+          availableOntologyValidationProviders: listOntologyValidationProviders()
         }
       });
       return;
@@ -590,12 +852,17 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'GET' && pathname === '/api/app-state') {
       const stage = parseOptionalReviewStage(requestUrl.searchParams.get('stage')) ?? getCurrentStage();
-      sendJson(res, 200, getAppStatePayload(stage));
+      sendJson(res, 200, await buildAppStatePayload(stage));
       return;
     }
 
     if (method === 'GET' && pathname === '/api/review-stage/overview') {
       sendJson(res, 200, buildReviewStageOverviewPayload());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/ontology-validation/knowledge-base') {
+      sendJson(res, 200, ontologyValidationClient.getKnowledgeBase());
       return;
     }
 
@@ -752,8 +1019,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const enrichedItem = await enrichReviewItem(updatedItem, reviewItemState.stage);
+
       sendJson(res, 200, {
-        item: updatedItem,
+        item: enrichedItem,
         historyEntry,
         activity
       });

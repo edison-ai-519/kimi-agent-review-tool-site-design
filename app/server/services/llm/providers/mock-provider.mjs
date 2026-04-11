@@ -11,10 +11,20 @@ function summarizeKnowledgeDocuments(knowledgeDocuments) {
     .join('\n');
 }
 
-function buildMockCompletion({ prompt, context, knowledgeDocuments, useCase, metadata }) {
-  const contextSummary =
-    Array.isArray(context) && context.length > 0 ? context.filter(Boolean).slice(0, 3).join('；') : '当前未传入额外上下文。';
+function summarizeContext(context) {
+  if (!Array.isArray(context) || context.length === 0) {
+    return '当前未传入额外上下文。';
+  }
 
+  const normalized = context.map((entry) => String(entry ?? '').trim()).filter(Boolean);
+  const ontologyLines = normalized.filter((entry) => entry.includes('本体'));
+  const otherLines = normalized.filter((entry) => !entry.includes('本体')).slice(0, 3);
+
+  return [...otherLines, ...ontologyLines].slice(0, 6).join('；');
+}
+
+function buildMockCompletion({ prompt, context, knowledgeDocuments, useCase, metadata }) {
+  const contextSummary = summarizeContext(context);
   const knowledgeSummary = summarizeKnowledgeDocuments(knowledgeDocuments);
   const targetName = metadata?.reviewItemTitle ? `“${metadata.reviewItemTitle}”` : '当前问题';
 
@@ -34,6 +44,26 @@ function buildMockCompletion({ prompt, context, knowledgeDocuments, useCase, met
       `针对你的问题“${prompt}”，建议按“结论 -> 依据 -> 风险 -> 建议动作”四段式理解。`,
       `可参考的知识库材料：\n${knowledgeSummary}`,
       `当前上下文：${contextSummary}`
+    ].join('\n');
+  }
+
+  if (useCase === 'review-evaluation') {
+    return [
+      '以下内容由预留 AI 接口生成，当前为模拟评审输出。',
+      `${targetName}建议按“评审结论 -> 本体校验 -> 证据依据 -> 缺口提示 -> 下一步动作”五段式整理。`,
+      `任务提示：${prompt}`,
+      `知识库摘要：\n${knowledgeSummary}`,
+      `本体与评审上下文：${contextSummary}`
+    ].join('\n');
+  }
+
+  if (useCase === 'reasoning-summary') {
+    return [
+      '以下内容由预留 AI 接口生成，当前为模拟推理总结。',
+      `${targetName}的推理结论应同时引用本体规则、知识库证据和当前阶段状态。`,
+      `任务提示：${prompt}`,
+      `知识库摘要：\n${knowledgeSummary}`,
+      `本体与评审上下文：${contextSummary}`
     ].join('\n');
   }
 

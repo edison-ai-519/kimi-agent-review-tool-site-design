@@ -352,16 +352,6 @@ export function TopNavigation({
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium">推理面板打开时自动收起助手</div>
-                    <div className="text-xs text-muted-foreground">打开右侧推理依据时，让中间工作区获得更宽的编辑空间。</div>
-                  </div>
-                  <Switch
-                    checked={uiPreferences.autoHideAssistantOnReasoning}
-                    onCheckedChange={(checked) => onPreferencesChange?.({ autoHideAssistantOnReasoning: checked })}
-                  />
-                </div>
               </div>
             </div>
 

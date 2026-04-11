@@ -37,8 +37,7 @@ const desktopPreferencesStorageKey = 'kimi-review-desktop-preferences';
 const notificationReadAtStorageKey = 'kimi-review-notification-read-at';
 const defaultDesktopPreferences: DesktopUiPreferences = {
   showFloatingChat: true,
-  showBottomStatusBar: true,
-  autoHideAssistantOnReasoning: true
+  showBottomStatusBar: true
 };
 
 function readStoredPreferences(): DesktopUiPreferences {
@@ -428,24 +427,18 @@ function DesktopDashboard({
           <ReviewWorkspace
             project={currentProject}
             reviewItems={appState.reviewItems}
-            chatMessages={chatMessages}
-            chatConfig={appState.chatConfig}
             reviewHistoryByItem={historyByItem}
             generatedReferencesByItem={generatedReferencesByItem}
             stageOverview={stageOverview?.stages}
             userRole={userRole}
             permissions={reviewPermissions}
-            isChatPending={isChatPending}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
             historyLoadingItemId={historyLoadingItemId}
-            activeReviewItem={activeReviewItem}
             isReasoningVisible={Boolean(selectedReviewItem)}
-            autoHideAssistantOnReasoning={uiPreferences.autoHideAssistantOnReasoning}
             onShowReasoning={handleShowReasoning}
             onLoadHistory={onEnsureReviewHistory}
             onActiveReviewItemChange={setActiveReviewItemId}
-            onSendChat={onSendChat}
             onSaveReviewItem={onSaveReviewItem}
             onGenerateComment={onGenerateComment}
           />
@@ -592,19 +585,14 @@ function MobileDashboard({
             <ReviewWorkspace
               project={appState.project}
               reviewItems={appState.reviewItems}
-              chatMessages={chatMessages}
-              chatConfig={appState.chatConfig}
               reviewHistoryByItem={historyByItem}
               generatedReferencesByItem={generatedReferencesByItem}
-              isChatPending={isChatPending}
               savingItemId={savingItemId}
               generatingItemId={generatingItemId}
               historyLoadingItemId={historyLoadingItemId}
-              activeReviewItem={activeReviewItem}
               onShowReasoning={handleShowReasoning}
               onLoadHistory={onEnsureReviewHistory}
               onActiveReviewItemChange={setActiveReviewItemId}
-              onSendChat={onSendChat}
               onSaveReviewItem={onSaveReviewItem}
               onGenerateComment={onGenerateComment}
             />

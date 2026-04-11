@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bot, Check, Copy, Maximize2, Minimize2, Send, Sparkles, User, X } from 'lucide-react';
 import { RelatedDocumentsList } from '@/components/chat/RelatedDocumentsList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, ReviewItem } from '@/types';
 
@@ -76,7 +75,24 @@ export function FloatingChat({ messages, quickActions, isPending, activeReviewIt
   const [isDismissed, setIsDismissed] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isOpen = isManuallyOpen || (messages.length > 1 && !isDismissed);
+
+  useEffect(() => {
+    if (isMinimized) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    });
+  }, [isMinimized, messages, isPending]);
 
   const handleSend = () => {
     if (!input.trim() || isPending) {
@@ -166,7 +182,7 @@ export function FloatingChat({ messages, quickActions, isPending, activeReviewIt
 
         {!isMinimized && (
           <>
-            <ScrollArea className="flex-1 p-4">
+            <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <div className="space-y-4">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} onCopy={handleCopy} />
@@ -192,7 +208,7 @@ export function FloatingChat({ messages, quickActions, isPending, activeReviewIt
                   </motion.div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
             <div className="border-t border-border/50 p-4">
               <div className="mb-2 flex gap-2 overflow-x-auto pb-1 scrollbar-thin">

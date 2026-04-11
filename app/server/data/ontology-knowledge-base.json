@@ -1,0 +1,398 @@
+{
+  "id": "ontology-review-kb",
+  "name": "科研项目评审本体知识库",
+  "version": "1.0.0",
+  "updatedAt": "2026-04-10T14:30:00.000Z",
+  "description": "面向科研项目立项、中期和结题评审的本体知识库，包含概念、证据模式和规则画像，用于驱动评审项规则校验。",
+  "concepts": [
+    {
+      "id": "innovation",
+      "label": "创新性",
+      "aliases": ["创新", "原创", "差异化"],
+      "description": "用于判断项目技术路线是否具备创新点和差异化优势。"
+    },
+    {
+      "id": "novelty",
+      "label": "技术新颖性",
+      "aliases": ["新颖", "首创", "创新亮点"],
+      "description": "强调方案在模型设计、方法组合或应用路径上的新意。"
+    },
+    {
+      "id": "advancement",
+      "label": "技术先进性",
+      "aliases": ["先进性", "领先性", "效果优势"],
+      "description": "强调方案相较现有公开方法的性能或能力优势。"
+    },
+    {
+      "id": "feasibility",
+      "label": "可行性",
+      "aliases": ["可行", "落地", "实施条件"],
+      "description": "用于判断项目实施条件是否齐备。"
+    },
+    {
+      "id": "tech-maturity",
+      "label": "技术成熟度",
+      "aliases": ["成熟度", "研发基础", "技术准备"],
+      "description": "用于判断关键技术是否达到立项或阶段实施要求。"
+    },
+    {
+      "id": "data-readiness",
+      "label": "数据准备度",
+      "aliases": ["数据准备", "数据来源", "样本来源"],
+      "description": "用于判断训练数据、样本来源和标注条件是否充分。"
+    },
+    {
+      "id": "deployment-path",
+      "label": "实施路径",
+      "aliases": ["实施路径", "部署路径", "落地路径"],
+      "description": "用于判断阶段任务、部署方式和落地路径是否清晰。"
+    },
+    {
+      "id": "team",
+      "label": "团队能力",
+      "aliases": ["团队", "组织能力", "协同能力"],
+      "description": "用于判断团队配置和组织协同是否支撑项目执行。"
+    },
+    {
+      "id": "team-structure",
+      "label": "团队结构",
+      "aliases": ["团队结构", "角色配置", "成员结构"],
+      "description": "用于判断算法、工程、业务和领域专家是否均衡配置。"
+    },
+    {
+      "id": "leader-experience",
+      "label": "负责人经验",
+      "aliases": ["负责人经验", "承担经验", "项目经验"],
+      "description": "用于判断负责人是否具备承担同类项目的履历。"
+    },
+    {
+      "id": "coordination",
+      "label": "协作机制",
+      "aliases": ["协作机制", "协同机制", "周例会"],
+      "description": "用于判断团队是否形成稳定的分工和协调机制。"
+    },
+    {
+      "id": "budget",
+      "label": "预算结构",
+      "aliases": ["预算", "经费", "费用结构"],
+      "description": "用于判断经费结构、投入边界和资源使用是否合理。"
+    },
+    {
+      "id": "procurement",
+      "label": "设备采购",
+      "aliases": ["设备采购", "采购项", "硬件投入"],
+      "description": "用于判断设备采购是否必要、是否与研究目标匹配。"
+    },
+    {
+      "id": "annotation-cost",
+      "label": "数据与标注成本",
+      "aliases": ["标注成本", "数据成本", "标注费用"],
+      "description": "用于判断数据采集、标注和清洗成本是否充分说明。"
+    },
+    {
+      "id": "risk",
+      "label": "风险控制",
+      "aliases": ["风险", "风险控制", "问题闭环"],
+      "description": "用于判断技术风险、管理风险和整改机制是否闭环。"
+    },
+    {
+      "id": "tech-risk",
+      "label": "技术风险",
+      "aliases": ["技术风险", "模型风险", "泛化风险"],
+      "description": "用于判断技术路线和实验结果中的关键风险点。"
+    },
+    {
+      "id": "management-risk",
+      "label": "管理风险",
+      "aliases": ["管理风险", "材料完整性", "决算风险"],
+      "description": "用于判断过程管理、附件和验收材料风险。"
+    }
+  ],
+  "evidencePatterns": [
+    {
+      "id": "comparative-benchmark",
+      "label": "对比实验或基线说明",
+      "keywords": ["对比实验", "基线", "公开方案", "差异化", "对比"]
+    },
+    {
+      "id": "innovation-scenario",
+      "label": "创新目标与应用场景",
+      "keywords": ["多模态", "创新", "诊断", "场景", "应用"]
+    },
+    {
+      "id": "stage-target",
+      "label": "阶段目标或里程碑说明",
+      "keywords": ["阶段目标", "里程碑", "任务", "计划", "目标"]
+    },
+    {
+      "id": "data-source",
+      "label": "数据来源与准备条件",
+      "keywords": ["数据来源", "样本来源", "标注", "数据准备", "数据集"]
+    },
+    {
+      "id": "deployment-plan",
+      "label": "实施或部署路径",
+      "keywords": ["部署", "实施路径", "落地", "链路", "平台"]
+    },
+    {
+      "id": "fallback-plan",
+      "label": "失败回退或风险预案",
+      "keywords": ["回退", "风险", "预案", "备选方案", "兜底"]
+    },
+    {
+      "id": "role-division",
+      "label": "团队分工与角色覆盖",
+      "keywords": ["算法", "工程", "临床", "角色", "分工", "成员结构"]
+    },
+    {
+      "id": "leader-experience-evidence",
+      "label": "负责人或核心成员经验",
+      "keywords": ["负责人", "经验", "承担", "核心成员", "项目经验"]
+    },
+    {
+      "id": "coordination-mechanism",
+      "label": "协作或例会机制",
+      "keywords": ["协作机制", "协同", "周例会", "沟通机制", "联合"]
+    },
+    {
+      "id": "budget-breakdown",
+      "label": "预算拆分说明",
+      "keywords": ["拆分", "预算说明", "采购项", "费用结构", "分项"]
+    },
+    {
+      "id": "cost-objective-link",
+      "label": "成本与研究目标关联",
+      "keywords": ["研究目标", "目标关联", "直接关系", "任务匹配", "必要性"]
+    },
+    {
+      "id": "ops-boundary",
+      "label": "运维或后续成本边界",
+      "keywords": ["运维", "维护", "边界", "运行成本", "后续成本"]
+    },
+    {
+      "id": "milestone-mapping",
+      "label": "里程碑达成映射",
+      "keywords": ["里程碑", "达成", "阶段目标", "映射", "计划推进"]
+    },
+    {
+      "id": "variance-explanation",
+      "label": "偏差原因与调整说明",
+      "keywords": ["偏差", "调整", "原因", "修正", "补充"]
+    },
+    {
+      "id": "prototype-evidence",
+      "label": "样机或原型交付说明",
+      "keywords": ["样机", "原型", "交付", "演示", "系统"]
+    },
+    {
+      "id": "dataset-traceability",
+      "label": "数据可追溯说明",
+      "keywords": ["样本来源", "可追溯", "数据集", "标注", "来源说明"]
+    },
+    {
+      "id": "reproducible-results",
+      "label": "实验复现与指标说明",
+      "keywords": ["复现", "实验结果", "指标", "性能", "验证"]
+    },
+    {
+      "id": "risk-list",
+      "label": "风险清单",
+      "keywords": ["风险清单", "风险点", "问题列表", "风险识别", "问题项"]
+    },
+    {
+      "id": "rectification-proof",
+      "label": "整改动作与证明",
+      "keywords": ["整改", "措施", "验证结果", "处理", "修复"]
+    },
+    {
+      "id": "closure-metric",
+      "label": "闭环指标或结项判断",
+      "keywords": ["闭环", "结项", "达标", "完成标准", "验收"]
+    },
+    {
+      "id": "budget-execution",
+      "label": "经费执行进度说明",
+      "keywords": ["经费执行", "执行进度", "资源投入", "使用进度", "执行情况"]
+    },
+    {
+      "id": "equipment-usage",
+      "label": "设备利用说明",
+      "keywords": ["设备利用", "设备使用", "利用率", "硬件投入", "设备采购"]
+    },
+    {
+      "id": "resource-match",
+      "label": "资源与任务匹配说明",
+      "keywords": ["任务匹配", "资源利用", "投入结构", "资源配置", "匹配"]
+    },
+    {
+      "id": "deliverable-mapping",
+      "label": "成果与目标映射",
+      "keywords": ["成果", "目标兑现", "承诺", "交付", "覆盖"]
+    },
+    {
+      "id": "target-acceptance",
+      "label": "关键指标验收说明",
+      "keywords": ["指标", "验收", "达标", "关键指标", "完成度"]
+    },
+    {
+      "id": "gap-boundary",
+      "label": "未完成边界说明",
+      "keywords": ["未完成", "边界", "范围", "缺口", "剩余问题"]
+    },
+    {
+      "id": "stability-validation",
+      "label": "稳定性验证",
+      "keywords": ["稳定性", "鲁棒性", "验证", "复核", "一致性"]
+    },
+    {
+      "id": "application-scenario",
+      "label": "应用场景或示范说明",
+      "keywords": ["示范", "应用场景", "推广", "落地场景", "应用基础"]
+    },
+    {
+      "id": "deployment-support",
+      "label": "推广支撑条件",
+      "keywords": ["部署支持", "配套", "资源支持", "推广条件", "实施支撑"]
+    },
+    {
+      "id": "ip-layout",
+      "label": "知识产权布局",
+      "keywords": ["专利", "著作权", "论文", "知识产权", "布局"]
+    },
+    {
+      "id": "transformation-path",
+      "label": "成果转化路径",
+      "keywords": ["转化", "落地路径", "合作", "应用推广", "转化计划"]
+    },
+    {
+      "id": "cooperation-mechanism",
+      "label": "转化协同机制",
+      "keywords": ["合作机制", "协同", "院企合作", "联合推进", "对接"]
+    },
+    {
+      "id": "closing-materials",
+      "label": "结题材料完整性",
+      "keywords": ["结题报告", "验收附件", "支撑材料", "附件", "完整性"]
+    },
+    {
+      "id": "final-accounting",
+      "label": "经费决算说明",
+      "keywords": ["决算", "经费说明", "决算说明", "设备折旧", "资金使用"]
+    },
+    {
+      "id": "asset-disposal",
+      "label": "资产或剩余经费处理说明",
+      "keywords": ["剩余预算", "资产处理", "运维", "结余", "后续处理"]
+    }
+  ],
+  "reviewProfiles": [
+    {
+      "stage": "proposal",
+      "itemIds": ["1"],
+      "conceptIds": ["innovation", "novelty", "advancement"],
+      "requiredEvidenceIds": ["comparative-benchmark", "innovation-scenario", "stage-target"],
+      "requiredDocumentCategories": ["proposal", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 24
+    },
+    {
+      "stage": "proposal",
+      "itemIds": ["2"],
+      "conceptIds": ["feasibility", "tech-maturity", "data-readiness", "deployment-path"],
+      "requiredEvidenceIds": ["data-source", "deployment-plan", "fallback-plan"],
+      "requiredDocumentCategories": ["proposal", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 20
+    },
+    {
+      "stage": "proposal",
+      "itemIds": ["3"],
+      "conceptIds": ["team", "team-structure", "leader-experience", "coordination"],
+      "requiredEvidenceIds": ["role-division", "leader-experience-evidence", "coordination-mechanism"],
+      "requiredDocumentCategories": ["team"],
+      "minKnowledgeDocuments": 1,
+      "highScoreThreshold": 20
+    },
+    {
+      "stage": "proposal",
+      "itemIds": ["4"],
+      "conceptIds": ["budget", "procurement", "annotation-cost", "management-risk"],
+      "requiredEvidenceIds": ["budget-breakdown", "cost-objective-link", "ops-boundary"],
+      "requiredDocumentCategories": ["finance", "proposal"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 16
+    },
+    {
+      "stage": "midterm",
+      "itemIds": ["midterm-1"],
+      "conceptIds": ["feasibility", "deployment-path"],
+      "requiredEvidenceIds": ["milestone-mapping", "variance-explanation", "stage-target"],
+      "requiredDocumentCategories": ["proposal", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 22
+    },
+    {
+      "stage": "midterm",
+      "itemIds": ["midterm-2"],
+      "conceptIds": ["feasibility", "data-readiness", "tech-maturity"],
+      "requiredEvidenceIds": ["prototype-evidence", "dataset-traceability", "reproducible-results"],
+      "requiredDocumentCategories": ["proposal", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 18
+    },
+    {
+      "stage": "midterm",
+      "itemIds": ["midterm-3"],
+      "conceptIds": ["risk", "tech-risk", "management-risk"],
+      "requiredEvidenceIds": ["risk-list", "rectification-proof", "closure-metric"],
+      "requiredDocumentCategories": ["case", "proposal"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 15
+    },
+    {
+      "stage": "midterm",
+      "itemIds": ["midterm-4"],
+      "conceptIds": ["budget", "annotation-cost", "procurement"],
+      "requiredEvidenceIds": ["budget-execution", "equipment-usage", "resource-match"],
+      "requiredDocumentCategories": ["finance", "proposal"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 18
+    },
+    {
+      "stage": "final",
+      "itemIds": ["final-1"],
+      "conceptIds": ["innovation", "advancement", "feasibility"],
+      "requiredEvidenceIds": ["deliverable-mapping", "target-acceptance", "gap-boundary"],
+      "requiredDocumentCategories": ["proposal", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 24
+    },
+    {
+      "stage": "final",
+      "itemIds": ["final-2"],
+      "conceptIds": ["feasibility", "deployment-path", "tech-maturity"],
+      "requiredEvidenceIds": ["stability-validation", "application-scenario", "deployment-support"],
+      "requiredDocumentCategories": ["case", "proposal"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 18
+    },
+    {
+      "stage": "final",
+      "itemIds": ["final-3"],
+      "conceptIds": ["team", "coordination", "management-risk"],
+      "requiredEvidenceIds": ["ip-layout", "transformation-path", "cooperation-mechanism"],
+      "requiredDocumentCategories": ["team", "case"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 18
+    },
+    {
+      "stage": "final",
+      "itemIds": ["final-4"],
+      "conceptIds": ["budget", "management-risk", "risk"],
+      "requiredEvidenceIds": ["closing-materials", "final-accounting", "asset-disposal"],
+      "requiredDocumentCategories": ["finance", "proposal"],
+      "minKnowledgeDocuments": 2,
+      "highScoreThreshold": 15
+    }
+  ]
+}
