@@ -5,13 +5,16 @@ import type {
   AuthSession,
   ChatMessage,
   KnowledgeDocument,
+  ProjectSubmissionInput,
+  ProjectSummary,
   ReasoningData,
   ReviewActivity,
   ReviewHistoryEntry,
   ReviewItem,
   ReviewStage,
   ReviewStageOverviewPayload,
-  SystemStatus
+  SystemStatus,
+  UserRole
 } from '@/types';
 
 type LoadedAppState = Omit<AppStatePayload, 'systemStatus'> & {
@@ -55,6 +58,7 @@ export function useReviewApp() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [currentStage, setCurrentStage] = useState<ReviewStage>('proposal');
   const [appState, setAppState] = useState<LoadedAppState | null>(null);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [stageOverview, setStageOverview] = useState<ReviewStageOverviewPayload | null>(null);
   const [chatMessagesByStage, setChatMessagesByStage] = useState<ChatMessagesByStage>({});
   const [reasoningByItem, setReasoningByItem] = useState<Record<string, ReasoningData>>({});
@@ -65,6 +69,7 @@ export function useReviewApp() {
   const [isChatPending, setIsChatPending] = useState(false);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
+  const [isSubmittingProject, setIsSubmittingProject] = useState(false);
   const [reasoningLoadingItemId, setReasoningLoadingItemId] = useState<string | null>(null);
   const [historyLoadingItemId, setHistoryLoadingItemId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -85,6 +90,7 @@ export function useReviewApp() {
       const [payload, overview] = await Promise.all([api.getAppState(stage), api.getReviewStageOverview()]);
       const nextAppState = hydrateAppState(payload);
       setAppState(nextAppState);
+      setProjects(payload.projects ?? [payload.project]);
       setCurrentStage(nextAppState.project.stage);
       setStageOverview(overview);
       setChatMessagesByStage((currentMessages) => ({
@@ -110,16 +116,17 @@ export function useReviewApp() {
     void loadAppState().catch(() => undefined);
   }, [session]);
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, role: UserRole) => {
     setIsAuthenticating(true);
     setErrorMessage(null);
     setChatMessagesByStage({});
     setReasoningByItem({});
     setHistoryByItem({});
     setGeneratedReferencesByItem({});
+    setProjects([]);
 
     try {
-      const nextSession = await api.login(username, password);
+      const nextSession = await api.login(username, password, role);
       setSession(nextSession);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '登录失败。');
@@ -142,6 +149,46 @@ export function useReviewApp() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '切换评审阶段失败。');
       throw error;
+    }
+  };
+
+  const changeProject = async (projectId: string) => {
+    if (appState?.project.id === projectId) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setReasoningByItem({});
+    setHistoryByItem({});
+    setGeneratedReferencesByItem({});
+    setChatMessagesByStage({});
+
+    try {
+      await api.selectProject(projectId);
+      await loadAppState();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '切换项目失败。');
+      throw error;
+    }
+  };
+
+  const submitProject = async (payload: ProjectSubmissionInput) => {
+    setIsSubmittingProject(true);
+    setErrorMessage(null);
+    setReasoningByItem({});
+    setHistoryByItem({});
+    setGeneratedReferencesByItem({});
+    setChatMessagesByStage({});
+
+    try {
+      const response = await api.submitProject(payload);
+      await loadAppState('proposal');
+      return response.project;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '提交项目失败。');
+      throw error;
+    } finally {
+      setIsSubmittingProject(false);
     }
   };
 
@@ -334,6 +381,7 @@ export function useReviewApp() {
     session,
     currentStage,
     appState,
+    projects,
     stageOverview,
     chatMessages,
     reasoningByItem,
@@ -344,12 +392,15 @@ export function useReviewApp() {
     isChatPending,
     savingItemId,
     generatingItemId,
+    isSubmittingProject,
     reasoningLoadingItemId,
     historyLoadingItemId,
     errorMessage,
     reloadAppState: () => loadAppState(currentStage),
     login,
     changeStage,
+    changeProject,
+    submitProject,
     ensureReasoning,
     ensureReviewHistory,
     saveReviewItem,

@@ -40,12 +40,15 @@ const reviewStageSeeds = createStageSeeds(appStateSeed);
 const stateStore = createStateStore({
   dataDir,
   stageSeeds: reviewStageSeeds,
-  defaultStage: appStateSeed.project.stage
+  defaultProject: appStateSeed.project
 });
 
 const HOST = process.env.API_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.API_PORT ?? 8787);
 const REVIEW_STATUSES = ['draft', 'pending', 'in_review', 'needs_revision', 'reviewed', 'disputed'];
+const USER_ROLES = ['expert', 'applicant', 'admin'];
+const MAX_PROJECT_ATTACHMENTS = 20;
+const MAX_PROJECT_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 class HttpError extends Error {
   constructor(statusCode, message) {
@@ -68,16 +71,50 @@ function isReviewStatus(value) {
   return REVIEW_STATUSES.includes(value);
 }
 
-function getCurrentStage() {
-  return stateStore.getCurrentStage();
+function inferDemoUserRole(username) {
+  const normalizedUsername = username.toLowerCase();
+
+  if (normalizedUsername.includes('admin')) {
+    return 'admin';
+  }
+
+  if (normalizedUsername.includes('apply') || normalizedUsername.includes('applicant')) {
+    return 'applicant';
+  }
+
+  return 'expert';
 }
 
-function getReviewItems(stage = getCurrentStage()) {
-  return stateStore.getReviewItems(stage);
+function parseOptionalUserRole(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string' || !USER_ROLES.includes(value)) {
+    throw new HttpError(400, `role 必须是 ${USER_ROLES.join(' / ')} 之一。`);
+  }
+
+  return value;
 }
 
-function getActivityFeed(stage = getCurrentStage()) {
-  return stateStore.getActivityFeed(stage);
+function getCurrentProjectId() {
+  return stateStore.getCurrentProjectId();
+}
+
+function getCurrentProject() {
+  return stateStore.getProject();
+}
+
+function getCurrentStage(projectId = getCurrentProjectId()) {
+  return stateStore.getCurrentStage(projectId);
+}
+
+function getReviewItems(stage = getCurrentStage(), projectId = getCurrentProjectId()) {
+  return stateStore.getReviewItems(stage, projectId);
+}
+
+function getActivityFeed(stage = getCurrentStage(), projectId = getCurrentProjectId()) {
+  return stateStore.getActivityFeed(stage, projectId);
 }
 
 function getReviewItemState(itemId) {
@@ -86,8 +123,9 @@ function getReviewItemState(itemId) {
     return null;
   }
 
-  const item = getReviewItems(stage).find((reviewItem) => reviewItem.id === itemId) ?? null;
-  return item ? { stage, item } : null;
+  const projectId = getCurrentProjectId();
+  const item = getReviewItems(stage, projectId).find((reviewItem) => reviewItem.id === itemId) ?? null;
+  return item ? { projectId, stage, item } : null;
 }
 
 function getReviewItemStateOrThrow(itemId) {
@@ -121,7 +159,7 @@ function parseRequiredReviewStage(value) {
 }
 
 function parseOptionalItemId(value) {
-  if (value === undefined) {
+  if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
@@ -130,6 +168,120 @@ function parseOptionalItemId(value) {
   }
 
   return value;
+}
+
+function parseRequiredNonEmptyString(value, label, maxLength = 120) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    throw new HttpError(400, `${label}不能为空。`);
+  }
+
+  if (normalized.length > maxLength) {
+    throw new HttpError(400, `${label}不能超过 ${maxLength} 个字符。`);
+  }
+
+  return normalized;
+}
+
+function parseOptionalString(value, maxLength = 600) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length > maxLength) {
+    throw new HttpError(400, `文本不能超过 ${maxLength} 个字符。`);
+  }
+
+  return normalized;
+}
+
+function parseOptionalPositiveInteger(value, label) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized < 0) {
+    throw new HttpError(400, `${label}必须是非负整数。`);
+  }
+
+  return normalized;
+}
+
+function parseProjectAttachments(value) {
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, '附件必须是数组。');
+  }
+
+  if (value.length > MAX_PROJECT_ATTACHMENTS) {
+    throw new HttpError(400, `附件不能超过 ${MAX_PROJECT_ATTACHMENTS} 个。`);
+  }
+
+  return value.map((attachment, index) => {
+    if (!attachment || typeof attachment !== 'object' || Array.isArray(attachment)) {
+      throw new HttpError(400, `第 ${index + 1} 个附件信息不合法。`);
+    }
+
+    const size = parseOptionalPositiveInteger(attachment.size, `第 ${index + 1} 个附件大小`) ?? 0;
+    if (size > MAX_PROJECT_ATTACHMENT_BYTES) {
+      throw new HttpError(400, `第 ${index + 1} 个附件不能超过 100MB。`);
+    }
+
+    return {
+      id: parseOptionalString(attachment.id, 120) ?? `attachment-${randomUUID()}`,
+      name: parseRequiredNonEmptyString(attachment.name, `第 ${index + 1} 个附件名称`, 180),
+      size,
+      type: parseOptionalString(attachment.type, 120),
+      lastModified: parseOptionalPositiveInteger(attachment.lastModified, `第 ${index + 1} 个附件更新时间`),
+      uploadedAt: parseOptionalString(attachment.uploadedAt, 80) ?? new Date().toISOString()
+    };
+  });
+}
+
+function parseProjectMaterials(value) {
+  const materials = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+
+  return {
+    summary: parseRequiredNonEmptyString(materials.summary, '项目摘要', 1000),
+    objectives: parseRequiredNonEmptyString(materials.objectives, '研究目标', 1200),
+    technicalRoute: parseRequiredNonEmptyString(materials.technicalRoute, '技术路线', 1600),
+    innovation: parseOptionalString(materials.innovation, 1200),
+    milestones: parseOptionalString(materials.milestones, 1200),
+    teamProfile: parseOptionalString(materials.teamProfile, 1200),
+    budgetBreakdown: parseOptionalString(materials.budgetBreakdown, 1200),
+    expectedOutcomes: parseOptionalString(materials.expectedOutcomes, 1200),
+    riskPlan: parseOptionalString(materials.riskPlan, 1200),
+    ethicsAndCompliance: parseOptionalString(materials.ethicsAndCompliance, 1000),
+    attachmentsDescription: parseOptionalString(materials.attachmentsDescription, 1000),
+    attachments: parseProjectAttachments(materials.attachments)
+  };
+}
+
+function parseProjectSubmission(body) {
+  const submittedAt = new Date().toISOString();
+  const materials = parseProjectMaterials(body.materials);
+
+  return {
+    id: `project-${randomUUID()}`,
+    name: parseRequiredNonEmptyString(body.name, '项目名称', 120),
+    applicant: parseRequiredNonEmptyString(body.applicant, '申报单位', 120),
+    budget: parseOptionalString(body.budget, 60) ?? '待补充',
+    duration: parseOptionalString(body.duration, 80) ?? '待补充',
+    field: parseOptionalString(body.field, 120) ?? '待补充',
+    summary: materials.summary,
+    contactName: parseOptionalString(body.contactName, 80),
+    contactPhone: parseOptionalString(body.contactPhone, 40),
+    contactEmail: parseOptionalString(body.contactEmail, 120),
+    materials,
+    source: 'submitted',
+    submittedAt,
+    stage: 'proposal'
+  };
 }
 
 function parseLimit(value, fallback = 3) {
@@ -206,8 +358,8 @@ function sendNoContent(res) {
   res.end();
 }
 
-function getLastUpdateIsoString(stage = getCurrentStage()) {
-  const activityFeed = getActivityFeed(stage);
+function getLastUpdateIsoString(stage = getCurrentStage(), projectId = getCurrentProjectId()) {
+  const activityFeed = getActivityFeed(stage, projectId);
   return activityFeed[0]?.createdAt ?? appStateSeed.systemStatus.lastUpdate;
 }
 
@@ -459,9 +611,10 @@ async function enrichReviewItem(item, stage) {
   }
 }
 
-async function buildAppStatePayload(stage = getCurrentStage()) {
+async function buildAppStatePayload(stage = getCurrentStage(), projectId = getCurrentProjectId()) {
   const stageSeed = reviewStageSeeds[stage];
-  const reviewItems = await Promise.all(getReviewItems(stage).map((item) => enrichReviewItem(item, stage)));
+  const project = stateStore.getProject(projectId) ?? stageSeed.project;
+  const reviewItems = await Promise.all(getReviewItems(stage, projectId).map((item) => enrichReviewItem(item, stage)));
   const fallbackOntology = clone(appStateSeed.ontology);
   let ontology = fallbackOntology;
 
@@ -469,7 +622,10 @@ async function buildAppStatePayload(stage = getCurrentStage()) {
     ontology = {
       ...fallbackOntology,
       contextVectors: await ontologyValidationClient.getContextVectors({
-        project: stageSeed.project,
+        project: {
+          ...project,
+          stage
+        },
         stage,
         reviewItems,
         fallbackVectors: fallbackOntology.contextVectors
@@ -481,16 +637,21 @@ async function buildAppStatePayload(stage = getCurrentStage()) {
 
   return {
     ...clone(appStateSeed),
-    project: clone(stageSeed.project),
+    project: {
+      ...clone(project),
+      stage
+    },
     systemStatus: {
       ...clone(appStateSeed.systemStatus),
-      lastUpdate: getLastUpdateIsoString(stage)
+      lastUpdate: getLastUpdateIsoString(stage, projectId)
     },
     reviewItems,
     ontology,
-    activityFeed: getActivityFeed(stage),
+    activityFeed: getActivityFeed(stage, projectId),
     knowledgeBase: knowledgeBaseClient.getKnowledgeBase(),
-    chatConfig: clone(stageSeed.chatConfig)
+    chatConfig: clone(stageSeed.chatConfig),
+    projects: stateStore.listProjects(),
+    currentProjectId: projectId
   };
 }
 
@@ -514,21 +675,35 @@ function buildStageCompletionRecommendation(stage, summary) {
   return `${REVIEW_STAGE_LABELS[stage]}已创建评审上下文，可以开始处理该阶段任务。`;
 }
 
-function buildStageOverview(stage) {
-  const reviewItems = getReviewItems(stage);
+function hasStageWorkStarted(reviewItems) {
+  return reviewItems.some(
+    (item) =>
+      item.status === 'reviewed' ||
+      item.status === 'disputed' ||
+      item.status === 'needs_revision' ||
+      item.status === 'in_review' ||
+      typeof item.score === 'number' ||
+      Boolean(String(item.comment ?? '').trim()) ||
+      Boolean(item.updatedAt)
+  );
+}
+
+function buildStageOverview(stage, projectId = getCurrentProjectId()) {
+  const reviewItems = getReviewItems(stage, projectId);
   const total = reviewItems.length;
   const completed = reviewItems.filter((item) => item.status === 'reviewed').length;
   const pending = reviewItems.filter((item) => ['draft', 'pending', 'in_review'].includes(item.status)).length;
   const disputed = reviewItems.filter((item) => item.status === 'disputed').length;
   const needsRevision = reviewItems.filter((item) => item.status === 'needs_revision').length;
   const completionPercent = total === 0 ? 0 : Math.round((completed / total) * 100);
+  const hasStarted = hasStageWorkStarted(reviewItems);
 
   let status = 'not_started';
   if (total > 0 && completed === total) {
     status = 'completed';
   } else if (disputed > 0 || needsRevision > 0) {
     status = 'blocked';
-  } else if (completed > 0 || pending > 0) {
+  } else if (hasStarted || completed > 0 || (pending > 0 && stage === getCurrentStage(projectId))) {
     status = 'in_progress';
   }
 
@@ -566,7 +741,7 @@ function getStageBlockingReason(stageOverview) {
   return `${stageOverview.label}尚未满足进入下一阶段的条件。`;
 }
 
-function buildStageTransitionDecision(fromStage, toStage) {
+function buildStageTransitionDecision(fromStage, toStage, projectId = getCurrentProjectId()) {
   if (fromStage === toStage) {
     return {
       allowed: true,
@@ -585,7 +760,7 @@ function buildStageTransitionDecision(fromStage, toStage) {
   }
 
   for (const prerequisiteStage of REVIEW_STAGES.slice(0, toIndex)) {
-    const stageOverview = buildStageOverview(prerequisiteStage);
+    const stageOverview = buildStageOverview(prerequisiteStage, projectId);
     if (stageOverview.status !== 'completed') {
       return {
         allowed: false,
@@ -600,12 +775,12 @@ function buildStageTransitionDecision(fromStage, toStage) {
   };
 }
 
-function buildReviewStageOverviewPayload(currentStage = getCurrentStage()) {
+function buildReviewStageOverviewPayload(currentStage = getCurrentStage(), projectId = getCurrentProjectId()) {
   return {
     currentStage,
     stages: REVIEW_STAGES.map((stage) => {
-      const overview = buildStageOverview(stage);
-      const decision = buildStageTransitionDecision(currentStage, stage);
+      const overview = buildStageOverview(stage, projectId);
+      const decision = buildStageTransitionDecision(currentStage, stage, projectId);
 
       return {
         ...overview,
@@ -827,6 +1002,7 @@ const server = http.createServer(async (req, res) => {
         status: 'ok',
         service: 'kimi-review-api',
         time: new Date().toISOString(),
+        currentProjectId: getCurrentProjectId(),
         currentStage: getCurrentStage(),
         integrations: {
           knowledgeBaseProvider: knowledgeBaseClient.name,
@@ -850,11 +1026,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const role = username.toLowerCase().includes('admin')
-        ? 'admin'
-        : username.toLowerCase().includes('apply')
-          ? 'applicant'
-          : 'expert';
+      const role = parseOptionalUserRole(body.role) ?? inferDemoUserRole(username);
 
       sendJson(res, 200, {
         token: `demo-${randomUUID()}`,
@@ -867,9 +1039,57 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (method === 'GET' && pathname === '/api/projects') {
+      sendJson(res, 200, {
+        currentProjectId: getCurrentProjectId(),
+        projects: stateStore.listProjects()
+      });
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/projects') {
+      const body = await readRequestBody(req);
+      const project = parseProjectSubmission(body);
+      const projectStageSeeds = createStageSeeds(appStateSeed, {
+        project,
+        mode: 'submitted',
+        submittedAt: project.submittedAt
+      });
+      const createdProject = stateStore.addProject({
+        project,
+        stageSeeds: projectStageSeeds,
+        submittedAt: project.submittedAt,
+        source: 'submitted'
+      });
+
+      sendJson(res, 201, {
+        project: createdProject,
+        message: '项目已提交，并已生成立项评审清单。'
+      });
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/projects/current') {
+      const body = await readRequestBody(req);
+      const projectId = parseRequiredNonEmptyString(body.projectId, 'projectId', 120);
+      const selectedProject = stateStore.setCurrentProject(projectId);
+
+      if (!selectedProject) {
+        sendJson(res, 404, { message: '未找到项目。' });
+        return;
+      }
+
+      sendJson(res, 200, {
+        project: selectedProject,
+        currentProjectId: selectedProject.id
+      });
+      return;
+    }
+
     if (method === 'GET' && pathname === '/api/app-state') {
-      const stage = parseOptionalReviewStage(requestUrl.searchParams.get('stage')) ?? getCurrentStage();
-      sendJson(res, 200, await buildAppStatePayload(stage));
+      const projectId = parseOptionalItemId(requestUrl.searchParams.get('projectId')) ?? getCurrentProjectId();
+      const stage = parseOptionalReviewStage(requestUrl.searchParams.get('stage')) ?? getCurrentStage(projectId);
+      sendJson(res, 200, await buildAppStatePayload(stage, projectId));
       return;
     }
 
@@ -886,15 +1106,16 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && pathname === '/api/review-stage') {
       const body = await readRequestBody(req);
       const stage = parseRequiredReviewStage(body.stage);
+      const projectId = getCurrentProjectId();
       const currentStage = getCurrentStage();
-      const decision = buildStageTransitionDecision(currentStage, stage);
+      const decision = buildStageTransitionDecision(currentStage, stage, projectId);
 
       if (!decision.allowed) {
         sendJson(res, 409, { message: decision.message });
         return;
       }
 
-      stateStore.setCurrentStage(stage);
+      stateStore.setCurrentStage(stage, projectId);
       sendJson(res, 200, { stage, label: REVIEW_STAGE_LABELS[stage], message: decision.message });
       return;
     }
@@ -995,7 +1216,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const reviewItemState = getReviewItemStateOrThrow(routeMatch.itemId);
-      stateStore.prependActivity(buildActivity('查看依据', reviewItemState.item.title, 'info'), reviewItemState.stage);
+      stateStore.prependActivity(buildActivity('查看依据', reviewItemState.item.title, 'info'), reviewItemState.stage, reviewItemState.projectId);
 
       sendJson(res, 200, reasoning);
       return;
@@ -1006,7 +1227,7 @@ const server = http.createServer(async (req, res) => {
 
       sendJson(res, 200, {
         itemId: routeMatch.itemId,
-        entries: stateStore.getReviewHistory(routeMatch.itemId, reviewItemState.stage)
+        entries: stateStore.getReviewHistory(routeMatch.itemId, reviewItemState.stage, reviewItemState.projectId)
       });
       return;
     }
@@ -1026,6 +1247,7 @@ const server = http.createServer(async (req, res) => {
       const activity = buildReviewActivity(nextItem, nextItem.status, reviewItemState.stage);
       const historyEntry = buildReviewHistoryEntry(reviewItemState.item, nextItem, activity.action, reviewItemState.stage);
       const updatedItem = stateStore.updateReviewItem(routeMatch.itemId, nextItem, {
+        projectId: reviewItemState.projectId,
         stage: reviewItemState.stage,
         activity,
         historyEntry

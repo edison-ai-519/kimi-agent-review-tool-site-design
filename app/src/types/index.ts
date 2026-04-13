@@ -101,6 +101,51 @@ export interface ProjectInfo {
   duration: string;
   field: string;
   stage: ReviewStage;
+  summary?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  materials?: ProjectSubmissionMaterials;
+  submittedAt?: string;
+  source?: 'demo' | 'submitted';
+}
+
+export type ProjectSummary = ProjectInfo;
+
+export interface ProjectSubmissionAttachment {
+  id?: string;
+  name: string;
+  size: number;
+  type?: string;
+  lastModified?: number;
+  uploadedAt?: string;
+}
+
+export interface ProjectSubmissionMaterials {
+  summary: string;
+  objectives: string;
+  technicalRoute: string;
+  innovation?: string;
+  milestones?: string;
+  teamProfile?: string;
+  budgetBreakdown?: string;
+  expectedOutcomes?: string;
+  riskPlan?: string;
+  ethicsAndCompliance?: string;
+  attachmentsDescription?: string;
+  attachments?: ProjectSubmissionAttachment[];
+}
+
+export interface ProjectSubmissionInput {
+  name: string;
+  applicant: string;
+  budget: string;
+  duration: string;
+  field: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  materials: ProjectSubmissionMaterials;
 }
 
 // System status
@@ -250,6 +295,8 @@ export interface AuthSession {
 
 export interface AppStatePayload {
   project: ProjectInfo;
+  currentProjectId: string;
+  projects: ProjectSummary[];
   systemStatus: Omit<SystemStatus, 'lastUpdate'> & { lastUpdate: string };
   reviewItems: ReviewItem[];
   ontology: OntologyData;

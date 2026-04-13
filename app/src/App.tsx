@@ -7,8 +7,10 @@ import {
   EyeOff,
   Lock,
   Network,
+  Shield,
   Sparkles,
-  User
+  User,
+  type LucideIcon
 } from 'lucide-react';
 import { FloatingChat } from '@/components/chat/FloatingChat';
 import { BottomStatusBar } from '@/components/navigation/BottomStatusBar';
@@ -19,6 +21,7 @@ import { MobileHomeView } from '@/components/mobile/MobileHomeView';
 import { MobileOntologyDrawer } from '@/components/mobile/MobileOntologyDrawer';
 import { MobileReasoningModal } from '@/components/mobile/MobileReasoningModal';
 import { OntologyPanel } from '@/components/panels/OntologyPanel';
+import { ProjectCenterPage } from '@/components/projects/ProjectCenterPage';
 import { ReasoningPanel } from '@/components/panels/ReasoningPanel';
 import { ReviewWorkspace } from '@/components/panels/ReviewWorkspace';
 import { useReviewApp } from '@/hooks/useReviewApp';
@@ -28,10 +31,11 @@ import { buildReviewStats } from '@/lib/review';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import type { AuthSession, DesktopUiPreferences, ReviewItem, ReviewStage, UserRole } from '@/types';
+import type { AuthSession, DesktopUiPreferences, ProjectSubmissionInput, ProjectSummary, ReviewItem, ReviewStage, UserRole } from '@/types';
 import './App.css';
 
 type MobileTab = 'home' | 'ontology' | 'review' | 'reasoning' | 'chat';
+type DesktopPage = 'workspace' | 'projects';
 
 const desktopPreferencesStorageKey = 'kimi-review-desktop-preferences';
 const notificationReadAtStorageKey = 'kimi-review-notification-read-at';
@@ -39,6 +43,36 @@ const defaultDesktopPreferences: DesktopUiPreferences = {
   showFloatingChat: true,
   showBottomStatusBar: true
 };
+
+const loginEntryOptions: {
+  role: UserRole;
+  title: string;
+  description: string;
+  usernamePlaceholder: string;
+  Icon: LucideIcon;
+}[] = [
+  {
+    role: 'expert',
+    title: '评审专家入口',
+    description: '处理评分、意见、依据和阶段结论。',
+    usernamePlaceholder: '例如 expert-zhang',
+    Icon: CheckCircle2
+  },
+  {
+    role: 'applicant',
+    title: '申报方入口',
+    description: '提交项目、补充材料、查看评审反馈。',
+    usernamePlaceholder: '例如 applicant-li',
+    Icon: User
+  },
+  {
+    role: 'admin',
+    title: '管理员入口',
+    description: '跟踪流程状态、争议项和系统配置。',
+    usernamePlaceholder: '例如 admin-wang',
+    Icon: Shield
+  }
+];
 
 function readStoredPreferences(): DesktopUiPreferences {
   if (typeof window === 'undefined') {
@@ -76,29 +110,32 @@ function LoginPage({
 }: {
   isLoading: boolean;
   errorMessage: string | null;
-  onLogin: (username: string, password: string) => Promise<void>;
+  onLogin: (username: string, password: string, role: UserRole) => Promise<void>;
 }) {
+  const [selectedRole, setSelectedRole] = useState<UserRole>('expert');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const isMobile = useIsMobile();
+  const selectedEntry = loginEntryOptions.find((entry) => entry.role === selectedRole) ?? loginEntryOptions[0];
+  const SelectedEntryIcon = selectedEntry.Icon;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      await onLogin(username, password);
+      await onLogin(username, password, selectedRole);
     } catch {
       // Error state is surfaced by the hook and rendered in the form.
     }
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="relative min-h-screen overflow-hidden bg-zinc-950">
       <div className="absolute inset-0">
         {Array.from({ length: 16 }).map((_, index) => (
           <motion.div
             key={index}
-            className="absolute h-1 w-1 rounded-full bg-blue-400/30"
+            className="absolute h-1 w-1 rounded-full bg-teal-300/30"
             style={{
               left: `${(index * 17) % 100}%`,
               top: `${(index * 11) % 100}%`
@@ -116,22 +153,22 @@ function LoginPage({
         ))}
 
         <motion.div
-          className="absolute left-[-200px] top-[-200px] h-[600px] w-[600px] rounded-full bg-blue-500/10 blur-3xl"
+          className="absolute left-[-200px] top-[-200px] h-[600px] w-[600px] rounded-full bg-emerald-500/10 blur-3xl"
           animate={{ scale: [1, 1.15, 1], opacity: [0.1, 0.2, 0.1] }}
           transition={{ duration: 8, repeat: Infinity }}
         />
         <motion.div
-          className="absolute bottom-[-150px] right-[-150px] h-[500px] w-[500px] rounded-full bg-purple-500/10 blur-3xl"
+          className="absolute bottom-[-150px] right-[-150px] h-[500px] w-[500px] rounded-full bg-rose-500/10 blur-3xl"
           animate={{ scale: [1.15, 1, 1.15], opacity: [0.1, 0.2, 0.1] }}
           transition={{ duration: 10, repeat: Infinity }}
         />
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
-        <div className={`w-full ${isMobile ? 'max-w-sm' : 'max-w-md'}`}>
+        <div className={`w-full ${isMobile ? 'max-w-sm' : 'max-w-3xl'}`}>
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8 text-center">
             <motion.div
-              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-2xl shadow-blue-500/30"
+              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-teal-500 shadow-2xl shadow-teal-500/20"
               whileHover={{ scale: 1.04, rotate: 4 }}
             >
               <Network className="h-10 w-10 text-white" />
@@ -144,7 +181,7 @@ function LoginPage({
             >
               本体智能评审系统
             </motion.h1>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-sm text-blue-200 sm:text-base">
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-sm text-teal-100 sm:text-base">
               透明、可解释、可联调
             </motion.p>
           </motion.div>
@@ -152,38 +189,68 @@ function LoginPage({
           <motion.div initial={{ opacity: 0, rotateX: 90 }} animate={{ opacity: 1, rotateX: 0 }} transition={{ duration: 0.8, delay: 0.35 }}>
             <Card className="border-white/20 bg-white/10 backdrop-blur-xl">
               <CardHeader className="pb-4">
-                <CardTitle className="text-center text-lg text-white sm:text-xl">用户登录</CardTitle>
+                <CardTitle className="flex items-center justify-center gap-2 text-center text-lg text-white sm:text-xl">
+                  <SelectedEntryIcon className="h-5 w-5 text-teal-200" />
+                  {selectedEntry.title}
+                </CardTitle>
               </CardHeader>
               <CardContent>
+                <div className="mb-5 grid gap-2 sm:grid-cols-3" role="tablist" aria-label="登录入口">
+                  {loginEntryOptions.map((entry) => {
+                    const EntryIcon = entry.Icon;
+                    const isSelected = entry.role === selectedRole;
+
+                    return (
+                      <button
+                        key={entry.role}
+                        type="button"
+                        role="tab"
+                        aria-selected={isSelected}
+                        onClick={() => setSelectedRole(entry.role)}
+                        className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                          isSelected
+                            ? 'border-teal-300/60 bg-teal-300/15 text-white'
+                            : 'border-white/15 bg-white/5 text-zinc-200 hover:bg-white/10'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          <EntryIcon className="h-4 w-4" />
+                          {entry.title.replace('入口', '')}
+                        </span>
+                        <span className="mt-2 block text-xs leading-relaxed text-zinc-300">{entry.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="mb-1.5 block text-sm text-blue-200">用户名</label>
+                    <label className="mb-1.5 block text-sm text-teal-100">用户名</label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-300" />
+                      <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-teal-200" />
                       <Input
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
-                        placeholder="输入任意用户名即可登录"
-                        className="h-11 border-white/20 bg-white/10 pl-10 text-white placeholder:text-blue-300/50"
+                        placeholder={selectedEntry.usernamePlaceholder}
+                        className="h-11 border-white/20 bg-white/10 pl-10 text-white placeholder:text-zinc-400"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm text-blue-200">密码</label>
+                    <label className="mb-1.5 block text-sm text-teal-100">密码</label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-300" />
+                      <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-teal-200" />
                       <Input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="输入任意密码即可登录"
-                        className="h-11 border-white/20 bg-white/10 pl-10 pr-10 text-white placeholder:text-blue-300/50"
+                        className="h-11 border-white/20 bg-white/10 pl-10 pr-10 text-white placeholder:text-zinc-400"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((current) => !current)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300 transition-colors hover:text-white"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-teal-200 transition-colors hover:text-white"
                       >
                         {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
@@ -195,7 +262,7 @@ function LoginPage({
                   <Button
                     type="submit"
                     disabled={isLoading || !username || !password}
-                    className="h-11 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700"
+                    className="h-11 w-full bg-teal-500 text-zinc-950 hover:bg-teal-400"
                   >
                     {isLoading ? (
                       <motion.div
@@ -205,7 +272,7 @@ function LoginPage({
                       />
                     ) : (
                       <>
-                        登录并进入系统
+                        进入{selectedEntry.title.replace('入口', '')}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
@@ -213,14 +280,14 @@ function LoginPage({
                 </form>
 
                 <div className="mt-6 border-t border-white/10 pt-4">
-                  <div className="flex items-center justify-center gap-4 text-sm">
-                    <div className="flex items-center gap-1.5 text-blue-200">
+                  <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
+                    <div className="flex items-center gap-1.5 text-teal-100">
                       <CheckCircle2 className="h-4 w-4" />
-                      <span>评审专家入口</span>
+                      <span>{selectedEntry.description}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-blue-200">
+                    <div className="flex items-center gap-1.5 text-zinc-300">
                       <CheckCircle2 className="h-4 w-4" />
-                      <span>支持后端联调</span>
+                      <span>演示入口，不启用正式 RBAC</span>
                     </div>
                   </div>
                 </div>
@@ -244,7 +311,7 @@ function LoginPage({
                 <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-white/10">
                   <feature.icon className="h-6 w-6 text-blue-300" />
                 </div>
-                <span className="text-sm text-blue-200">{feature.label}</span>
+                <span className="text-sm text-teal-100">{feature.label}</span>
               </motion.div>
             ))}
           </motion.div>
@@ -278,12 +345,14 @@ function DesktopDashboard({
   session,
   currentStage,
   appState,
+  projects,
   stageOverview,
   chatMessages,
   reasoningByItem,
   historyByItem,
   generatedReferencesByItem,
   isChatPending,
+  isProjectSubmitting,
   savingItemId,
   generatingItemId,
   reasoningLoadingItemId,
@@ -292,6 +361,8 @@ function DesktopDashboard({
   isLoadingAppState,
   onEnsureReasoning,
   onEnsureReviewHistory,
+  onProjectChange,
+  onProjectSubmit,
   onStageChange,
   onSendChat,
   onSaveReviewItem,
@@ -300,12 +371,14 @@ function DesktopDashboard({
   session: AuthSession;
   currentStage: ReviewStage;
   appState: NonNullable<ReturnType<typeof useReviewApp>['appState']>;
+  projects: ProjectSummary[];
   stageOverview: ReturnType<typeof useReviewApp>['stageOverview'];
   chatMessages: ReturnType<typeof useReviewApp>['chatMessages'];
   reasoningByItem: ReturnType<typeof useReviewApp>['reasoningByItem'];
   historyByItem: ReturnType<typeof useReviewApp>['historyByItem'];
   generatedReferencesByItem: ReturnType<typeof useReviewApp>['generatedReferencesByItem'];
   isChatPending: boolean;
+  isProjectSubmitting: boolean;
   savingItemId: string | null;
   generatingItemId: string | null;
   reasoningLoadingItemId: string | null;
@@ -314,15 +387,18 @@ function DesktopDashboard({
   isLoadingAppState: boolean;
   onEnsureReasoning: (item: ReviewItem) => Promise<unknown>;
   onEnsureReviewHistory: (itemId: string) => Promise<unknown>;
+  onProjectChange: (projectId: string) => Promise<void>;
+  onProjectSubmit: (payload: ProjectSubmissionInput) => Promise<unknown>;
   onStageChange: (stage: ReviewStage) => Promise<void>;
   onSendChat: (message: string, itemId?: string) => void;
   onSaveReviewItem: (itemId: string, score?: number, comment?: string, status?: ReviewItem['status']) => Promise<unknown> | void;
   onGenerateComment: (item: ReviewItem) => Promise<string | void> | string | void;
 }) {
-  const [userRole, setUserRole] = useState<UserRole>(session.user.role);
+  const userRole = session.user.role;
   const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
   const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
   const [isOntologyPanelCollapsed, setIsOntologyPanelCollapsed] = useState(false);
+  const [activePage, setActivePage] = useState<DesktopPage>('workspace');
   const [uiPreferences, setUiPreferences] = useState<DesktopUiPreferences>(() => readStoredPreferences());
   const [lastNotificationReadAt, setLastNotificationReadAt] = useState<string | null>(() => readStoredNotificationReadAt());
 
@@ -378,10 +454,11 @@ function DesktopDashboard({
         systemStatus={appState.systemStatus}
         stageOverview={stageOverview?.stages}
         uiPreferences={uiPreferences}
-        onRoleChange={setUserRole}
+        onOpenProjectCenter={() => setActivePage('projects')}
         onStageChange={(stage) => {
           setSelectedReviewItemId(null);
           setActiveReviewItemId(null);
+          setActivePage('workspace');
           void onStageChange(stage).catch(() => undefined);
         }}
         onNotificationsViewed={handleNotificationsViewed}
@@ -393,70 +470,91 @@ function DesktopDashboard({
         }
       />
 
-      <div className="flex flex-1 overflow-hidden pb-8 pt-16">
-        <AnimatePresence mode="wait">
-          {!isOntologyPanelCollapsed && (
-            <OntologyPanel
-              ontology={appState.ontology}
-              highlightedPath={highlightedOntologyPath}
-              isCollapsed={isOntologyPanelCollapsed}
-              onToggleCollapse={() => setIsOntologyPanelCollapsed((current) => !current)}
-            />
-          )}
-        </AnimatePresence>
-
-        {isOntologyPanelCollapsed && (
-          <motion.button
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            onClick={() => setIsOntologyPanelCollapsed(false)}
-            className="fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-lg border border-l-0 border-border/50 p-2 transition-colors hover:bg-muted/50 glass"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </motion.button>
-        )}
-
-        <div className="min-w-0 flex-1 overflow-hidden px-4 py-4">
-          {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
-          {isLoadingAppState && (
-            <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-sm text-blue-700">
-              正在切换评审阶段并加载对应数据...
-            </div>
-          )}
-
-          <ReviewWorkspace
-            project={currentProject}
-            reviewItems={appState.reviewItems}
-            reviewHistoryByItem={historyByItem}
-            generatedReferencesByItem={generatedReferencesByItem}
-            stageOverview={stageOverview?.stages}
-            userRole={userRole}
-            permissions={reviewPermissions}
-            savingItemId={savingItemId}
-            generatingItemId={generatingItemId}
-            historyLoadingItemId={historyLoadingItemId}
-            isReasoningVisible={Boolean(selectedReviewItem)}
-            onShowReasoning={handleShowReasoning}
-            onLoadHistory={onEnsureReviewHistory}
-            onActiveReviewItemChange={setActiveReviewItemId}
-            onSaveReviewItem={onSaveReviewItem}
-            onGenerateComment={onGenerateComment}
+      {activePage === 'projects' ? (
+        <div className="flex flex-1 overflow-hidden pb-8 pt-16">
+          <ProjectCenterPage
+            projects={projects}
+            currentProject={currentProject}
+            isSubmitting={isProjectSubmitting}
+            onProjectChange={async (projectId) => {
+              setSelectedReviewItemId(null);
+              setActiveReviewItemId(null);
+              await onProjectChange(projectId);
+            }}
+            onProjectSubmit={async (payload) => {
+              setSelectedReviewItemId(null);
+              setActiveReviewItemId(null);
+              await onProjectSubmit(payload);
+            }}
+            onOpenWorkspace={() => setActivePage('workspace')}
           />
         </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden pb-8 pt-16">
+          <AnimatePresence mode="wait">
+            {!isOntologyPanelCollapsed && (
+              <OntologyPanel
+                ontology={appState.ontology}
+                highlightedPath={highlightedOntologyPath}
+                isCollapsed={isOntologyPanelCollapsed}
+                onToggleCollapse={() => setIsOntologyPanelCollapsed((current) => !current)}
+              />
+            )}
+          </AnimatePresence>
 
-        <AnimatePresence mode="wait">
-          <ReasoningPanel
-            reviewItem={selectedReviewItem}
-            reasoning={selectedReasoning}
-            isLoading={reasoningLoadingItemId === selectedReviewItem?.id}
-            onClose={() => setSelectedReviewItemId(null)}
-          />
-        </AnimatePresence>
-      </div>
+          {isOntologyPanelCollapsed && (
+            <motion.button
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={() => setIsOntologyPanelCollapsed(false)}
+              className="fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-lg border border-l-0 border-border/50 p-2 transition-colors hover:bg-muted/50 glass"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </motion.button>
+          )}
+
+          <div className="min-w-0 flex-1 overflow-hidden px-4 py-4">
+            {errorMessage && <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">{errorMessage}</div>}
+            {isLoadingAppState && (
+              <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-sm text-blue-700">
+                正在切换评审阶段并加载对应数据...
+              </div>
+            )}
+
+            <ReviewWorkspace
+              project={currentProject}
+              reviewItems={appState.reviewItems}
+              reviewHistoryByItem={historyByItem}
+              generatedReferencesByItem={generatedReferencesByItem}
+              stageOverview={stageOverview?.stages}
+              userRole={userRole}
+              permissions={reviewPermissions}
+              savingItemId={savingItemId}
+              generatingItemId={generatingItemId}
+              historyLoadingItemId={historyLoadingItemId}
+              isReasoningVisible={Boolean(selectedReviewItem)}
+              onShowReasoning={handleShowReasoning}
+              onLoadHistory={onEnsureReviewHistory}
+              onActiveReviewItemChange={setActiveReviewItemId}
+              onSaveReviewItem={onSaveReviewItem}
+              onGenerateComment={onGenerateComment}
+            />
+          </div>
+
+          <AnimatePresence mode="wait">
+            <ReasoningPanel
+              reviewItem={selectedReviewItem}
+              reasoning={selectedReasoning}
+              isLoading={reasoningLoadingItemId === selectedReviewItem?.id}
+              onClose={() => setSelectedReviewItemId(null)}
+            />
+          </AnimatePresence>
+        </div>
+      )}
 
       {uiPreferences.showBottomStatusBar && <BottomStatusBar status={appState.systemStatus} />}
 
-      {uiPreferences.showFloatingChat && (
+      {activePage === 'workspace' && uiPreferences.showFloatingChat && (
         <FloatingChat
           messages={chatMessages}
           quickActions={appState.chatConfig.quickActions}
@@ -645,6 +743,7 @@ function App() {
     session,
     currentStage,
     appState,
+    projects,
     stageOverview,
     chatMessages,
     reasoningByItem,
@@ -653,6 +752,7 @@ function App() {
     isAuthenticating,
     isLoadingAppState,
     isChatPending,
+    isSubmittingProject,
     savingItemId,
     generatingItemId,
     reasoningLoadingItemId,
@@ -661,6 +761,8 @@ function App() {
     reloadAppState,
     login,
     changeStage,
+    changeProject,
+    submitProject,
     ensureReasoning,
     ensureReviewHistory,
     saveReviewItem,
@@ -728,12 +830,14 @@ function App() {
             session={session}
             currentStage={currentStage}
             appState={appState}
+            projects={projects}
             stageOverview={stageOverview}
             chatMessages={chatMessages}
             reasoningByItem={reasoningByItem}
             historyByItem={historyByItem}
             generatedReferencesByItem={generatedReferencesByItem}
             isChatPending={isChatPending}
+            isProjectSubmitting={isSubmittingProject}
             savingItemId={savingItemId}
             generatingItemId={generatingItemId}
             reasoningLoadingItemId={reasoningLoadingItemId}
@@ -742,6 +846,8 @@ function App() {
             isLoadingAppState={isLoadingAppState}
             onEnsureReasoning={ensureReasoning}
             onEnsureReviewHistory={ensureReviewHistory}
+            onProjectChange={changeProject}
+            onProjectSubmit={submitProject}
             onStageChange={changeStage}
             onSendChat={sendChat}
             onSaveReviewItem={saveReviewItem}

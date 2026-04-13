@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
-  Layers,
+  FolderOpen,
   Lock,
   Settings,
   Shield,
@@ -58,7 +58,7 @@ interface TopNavigationProps {
   systemStatus: SystemStatus;
   stageOverview?: ReviewStageOverview[];
   uiPreferences: DesktopUiPreferences;
-  onRoleChange?: (role: UserRole) => void;
+  onOpenProjectCenter?: () => void;
   onStageChange?: (stage: ReviewStage) => void;
   onNotificationsViewed?: () => void;
   onPreferencesChange?: (patch: Partial<DesktopUiPreferences>) => void;
@@ -108,12 +108,11 @@ export function TopNavigation({
   systemStatus,
   stageOverview = [],
   uiPreferences,
-  onRoleChange,
+  onOpenProjectCenter,
   onStageChange,
   onNotificationsViewed,
   onPreferencesChange
 }: TopNavigationProps) {
-  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [isStageMenuOpen, setIsStageMenuOpen] = useState(false);
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -149,23 +148,11 @@ export function TopNavigation({
         </div>
 
         <div className="flex items-center gap-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 hover:bg-muted/50">
-                <Layers className="h-4 w-4 text-muted-foreground" />
-                <span className="hidden max-w-[150px] truncate sm:inline">{project.name}</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-64">
-              <DropdownMenuLabel>当前评审项目</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex flex-col items-start gap-1">
-                <span className="font-medium">{project.name}</span>
-                <span className="text-xs text-muted-foreground">{project.applicant}</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button variant="ghost" className="gap-2 hover:bg-muted/50" onClick={onOpenProjectCenter}>
+            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden max-w-[150px] truncate sm:inline">{project.name}</span>
+            <Badge variant="secondary" className="text-[10px]">项目中心</Badge>
+          </Button>
 
           <DropdownMenu open={isStageMenuOpen} onOpenChange={setIsStageMenuOpen}>
             <DropdownMenuTrigger asChild>
@@ -270,26 +257,10 @@ export function TopNavigation({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <DropdownMenu open={isRoleMenuOpen} onOpenChange={setIsRoleMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 hover:bg-muted/50">
-                {roleIcons[userRole]}
-                <span className="hidden sm:inline">{roleLabels[userRole]}</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>切换用户角色</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {(Object.keys(roleLabels) as UserRole[]).map((role) => (
-                <DropdownMenuItem key={role} onClick={() => onRoleChange?.(role)} className="gap-2">
-                  {roleIcons[role]}
-                  {roleLabels[role]}
-                  {role === userRole && <CheckCircle2 className="ml-auto h-4 w-4 text-blue-500" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            {roleIcons[userRole]}
+            <span className="hidden sm:inline">{roleLabels[userRole]}</span>
+          </div>
 
           <Button
             variant="ghost"

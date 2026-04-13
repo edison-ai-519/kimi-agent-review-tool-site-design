@@ -311,38 +311,74 @@ function mapBaseActivityFeed(activityFeed) {
   }));
 }
 
+function mapSubmittedReviewItems(reviewItems) {
+  return reviewItems.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    status: 'pending',
+    confidence: Math.min(Math.max(Number(item.confidence ?? 0.72), 0.62), 0.78),
+    maxScore: item.maxScore
+  }));
+}
+
+function buildSubmittedActivityFeed(project, submittedAt, stage) {
+  if (stage !== 'proposal') {
+    return [];
+  }
+
+  return [
+    {
+      id: `activity-${project.id}-submitted`,
+      action: '提交项目',
+      target: project.name,
+      type: 'info',
+      createdAt: submittedAt
+    }
+  ];
+}
+
 export function isReviewStage(value) {
   return REVIEW_STAGES.includes(value);
 }
 
-export function createStageSeeds(appStateSeed) {
+export function createStageSeeds(appStateSeed, options = {}) {
+  const project = options.project ?? appStateSeed.project;
+  const mode = options.mode ?? 'demo';
+  const submittedAt = options.submittedAt ?? new Date().toISOString();
+  const mapReviewItems = mode === 'submitted' ? mapSubmittedReviewItems : mapBaseReviewItems;
+  const mapActivityFeed =
+    mode === 'submitted'
+      ? (_activityFeed, stage) => buildSubmittedActivityFeed(project, submittedAt, stage)
+      : (activityFeed) => mapBaseActivityFeed(activityFeed);
+
   return {
     proposal: {
       project: {
-        ...appStateSeed.project,
+        ...project,
         stage: 'proposal'
       },
       chatConfig: clone(reviewStageDefinitions.proposal.chatConfig),
-      reviewItems: mapBaseReviewItems(appStateSeed.reviewItems),
-      activityFeed: mapBaseActivityFeed(appStateSeed.activityFeed)
+      reviewItems: mapReviewItems(appStateSeed.reviewItems),
+      activityFeed: mapActivityFeed(appStateSeed.activityFeed, 'proposal')
     },
     midterm: {
       project: {
-        ...appStateSeed.project,
+        ...project,
         stage: 'midterm'
       },
       chatConfig: clone(reviewStageDefinitions.midterm.chatConfig),
-      reviewItems: clone(reviewStageDefinitions.midterm.reviewItems),
-      activityFeed: clone(reviewStageDefinitions.midterm.activityFeed)
+      reviewItems: mapReviewItems(reviewStageDefinitions.midterm.reviewItems),
+      activityFeed: mapActivityFeed(reviewStageDefinitions.midterm.activityFeed, 'midterm')
     },
     final: {
       project: {
-        ...appStateSeed.project,
+        ...project,
         stage: 'final'
       },
       chatConfig: clone(reviewStageDefinitions.final.chatConfig),
-      reviewItems: clone(reviewStageDefinitions.final.reviewItems),
-      activityFeed: clone(reviewStageDefinitions.final.activityFeed)
+      reviewItems: mapReviewItems(reviewStageDefinitions.final.reviewItems),
+      activityFeed: mapActivityFeed(reviewStageDefinitions.final.activityFeed, 'final')
     }
   };
 }

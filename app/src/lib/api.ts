@@ -4,13 +4,16 @@ import type {
   KnowledgeDocument,
   KnowledgeSearchResult,
   LlmCompletionResult,
+  ProjectSubmissionInput,
+  ProjectSummary,
   ReasoningData,
   ReviewActivity,
   ReviewHistoryEntry,
   ReviewHistoryPayload,
   ReviewItem,
   ReviewStage,
-  ReviewStageOverviewPayload
+  ReviewStageOverviewPayload,
+  UserRole
 } from '@/types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
@@ -42,10 +45,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function login(username: string, password: string) {
+export function login(username: string, password: string, role: UserRole) {
   return request<AuthSession>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password, role })
   });
 }
 
@@ -57,6 +60,24 @@ export function getAppState(stage?: ReviewStage) {
 
   const search = searchParams.toString();
   return request<AppStatePayload>(`/api/app-state${search ? `?${search}` : ''}`);
+}
+
+export function getProjects() {
+  return request<{ currentProjectId: string; projects: ProjectSummary[] }>('/api/projects');
+}
+
+export function submitProject(payload: ProjectSubmissionInput) {
+  return request<{ project: ProjectSummary; message: string }>('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function selectProject(projectId: string) {
+  return request<{ project: ProjectSummary; currentProjectId: string }>('/api/projects/current', {
+    method: 'POST',
+    body: JSON.stringify({ projectId })
+  });
 }
 
 export function setReviewStage(stage: ReviewStage) {
