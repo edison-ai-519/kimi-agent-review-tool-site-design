@@ -1,12 +1,15 @@
 # Integration Contracts
 
-This project now separates two replaceable integration layers:
+This project now separates these replaceable integration layers:
 
 - `Knowledge Base Provider`
 - `LLM Provider`
 - `Ontology Validation Provider`
+- `Project Evidence Provider`
 
 The default runtime still uses mock providers, but the code now includes HTTP template providers so a real service can be connected later without rewriting the application layer.
+
+`Project Evidence Provider` is intentionally a local development adapter in this version. It defines the storage and evidence-index contract without binding the application to Postgres, S3, OSS, MinIO, or another vendor.
 
 ## Knowledge Base
 
@@ -127,6 +130,59 @@ Expected response shape:
 }
 ```
 
+## Project Evidence
+
+Current provider:
+
+- `local-project-evidence`
+
+The provider is shaped around four operations:
+
+- `prepareProject(project)`: stores uploaded file objects, parses supported attachments, and writes `materials.evidenceDocuments`.
+- `listProjectEvidence(project)`: returns structured materials and parsed attachment evidence as normalized knowledge documents.
+- `searchProjectEvidence({ project, query, reviewItem, ontologyPathLabels, limit })`: retrieves current project evidence for ontology validation, AI scoring, auxiliary suggestions, and chat.
+- `supportedExtensions`: currently `.pdf`, `.doc`, `.docx`, `.xls`, `.xlsx`.
+
+Evidence document shape matches the knowledge base document contract:
+
+```json
+{
+  "id": "project-evidence:project-001:attachment:attachment-001:v1",
+  "title": "项目名称 - proposal.pdf",
+  "category": "proposal",
+  "summary": "解析后的摘要文本",
+  "content": "解析后的完整文本片段",
+  "tags": ["project-evidence", "upload", "proposal"],
+  "updatedAt": "2026-04-13T00:00:00.000Z"
+}
+```
+
+Attachment status is stored back on the project material:
+
+```json
+{
+  "id": "attachment-001",
+  "name": "proposal.pdf",
+  "size": 1024,
+  "type": "application/pdf",
+  "version": 1,
+  "storageKey": "project-evidence/files/project-001/1-attachment-001-proposal.pdf",
+  "parseStatus": "parsed",
+  "parsedAt": "2026-04-13T00:00:00.000Z",
+  "evidenceDocumentId": "project-evidence:project-001:attachment:attachment-001:v1",
+  "extractedTextPreview": "解析后的文本预览"
+}
+```
+
+Failure is non-blocking:
+
+```json
+{
+  "parseStatus": "failed",
+  "parseError": "Invalid PDF structure."
+}
+```
+
 ## Replacement Path
 
 If you later connect real services, you have two options:
@@ -135,11 +191,13 @@ If you later connect real services, you have two options:
 2. Add a brand-new provider file under:
    - `server/services/knowledge-base/providers/`
    - `server/services/llm/providers/`
+   - `server/services/project-evidence/providers/`
 
 Then register it in:
 
 - `server/services/knowledge-base/index.mjs`
 - `server/services/llm/index.mjs`
+- `server/services/project-evidence/index.mjs`
 
 ## Ontology Validation
 
@@ -296,8 +354,8 @@ Expected response shape:
 
 - The backend computes ontology validation for each review item before returning `/api/app-state`.
 - The backend computes ontology context vectors through the same ontology provider before returning `/api/app-state`, and falls back to seed vectors if the provider is unavailable.
-- The backend also computes `llmParticipation` for each review item, so the review card itself carries `ontologyValidation + LLM summary + relatedDocuments`.
-- `/api/chat` and `/api/llm/complete` now both inject knowledge-base retrieval results and ontology context before calling the LLM provider.
+- The backend also computes `llmParticipation` and read-only `aiScore` for each review item, so the review card itself carries `ontologyValidation + LLM summary + AI score + relatedDocuments`.
+- `/api/chat` and `/api/llm/complete` now both inject static knowledge-base retrieval, current project evidence, and ontology context before calling the LLM provider.
 - `/api/review-items/:id/reasoning` reuses the same review intelligence context, so reasoning output is also driven by ontology knowledge and LLM participation.
 - The mock provider reads a local mocked ontology knowledge base only for testing and interface simulation.
 - Later, the real ontology team only needs to implement the JSON contract above, and the app can switch to `http-template` without changing page logic.

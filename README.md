@@ -48,6 +48,8 @@
 - 支持知识库搜索
 - 支持推理依据、文档引用和本体路径展示
 - 支持本体验证 provider，`/api/app-state` 返回评审项时会带上 `ontologyValidation` 和 `llmParticipation`
+- 支持项目证据索引：结构化申报材料和 PDF / Word / Excel 上传附件会统一进入评审检索上下文
+- 支持 AI 双评分线：`ReviewItem.score` 仍是专家正式评分，`aiScore` 作为只读辅助评分展示
 - 支持通过本体 provider 动态返回 `contextVectors`，用于后续接入真实本体服务后的情境联合向量展示
 - 当前默认 provider 仍为 mock，可切换为 HTTP 模板 provider
 
@@ -63,7 +65,8 @@
 - 登录入口仍然是演示模式，不是正式账号体系
 - 入口角色目前主要作用在前端交互与权限提示上，未接正式鉴权
 - 持久化目前基于本地 JSON，不是数据库
-- 项目提交当前保存结构化申报材料和附件清单，还没有接对象存储、材料解析、材料版本和补材料闭环
+- 项目证据当前使用本地开发 Provider 保存文件对象和解析文本；数据库/对象存储仍停留在 Provider 契约层，未绑定 Postgres、S3、OSS 或 MinIO
+- 附件解析第一版只覆盖 PDF / Word / Excel，不包含图片 OCR、PPT 和压缩包解析
 - 默认 AI 与知识库 provider 仍为 mock
 - 还没有自动化测试
 - 前端构建已通过，但仍有较大的 chunk 告警
@@ -94,7 +97,8 @@
     |   |-- services/
     |   |   |-- knowledge-base/
     |   |   |-- llm/
-    |   |   `-- ontology-validation/
+    |   |   |-- ontology-validation/
+    |   |   `-- project-evidence/
     |   |-- dev.mjs
     |   |-- index.mjs
     |   |-- ontology-validation.mjs
@@ -175,13 +179,13 @@ npm run lint
   返回项目列表和当前项目。
 
 - `POST /api/projects`
-  提交新项目。最低只需要项目名称、申报单位、项目摘要、研究目标和技术路线；领域、预算、周期、创新点、里程碑、团队分工、预算拆分、预期成果、风险预案和附件清单可作为补充材料，并自动生成该项目的三阶段评审清单。
+  提交新项目。最低只需要项目名称、申报单位、项目摘要、研究目标和技术路线；领域、预算、周期、创新点、里程碑、团队分工、预算拆分、预期成果、风险预案和附件清单可作为补充材料。PDF / Word / Excel 附件会进入解析队列和项目证据索引，并自动生成该项目的三阶段评审清单。
 
 - `POST /api/projects/current`
   切换当前工作台项目。
 
 - `GET /api/app-state?stage=proposal|midterm|final`
-  返回当前项目指定阶段的项目、评审项、本体、活动流、聊天配置、项目列表和知识库基础信息。评审项会附带本体校验与 LLM 参与结果。
+  返回当前项目指定阶段的项目、评审项、本体、活动流、聊天配置、项目列表和知识库基础信息。评审项会附带本体校验、LLM 参与结果和只读 AI 评分。
 
 - `GET /api/review-stage/overview`
   返回全阶段概览、完成度、阻塞信息和建议结论。
@@ -196,7 +200,7 @@ npm run lint
   返回当前本体验证 provider 暴露的本体知识库元数据。
 
 - `POST /api/knowledge-base/search`
-  按 `query`、`itemId` 和上下文检索知识库。
+  按 `query`、`itemId` 和上下文检索静态知识库与当前项目证据索引。
 
 - `GET /api/review-items/:id/reasoning`
   返回评审项推理链、总结和引用文档。
@@ -208,10 +212,10 @@ npm run lint
   更新评分、意见和状态，并写入活动流与历史记录。
 
 - `POST /api/chat`
-  聊天接口，会先检索知识库并注入本体上下文，再调用 AI provider。
+  聊天接口，会先检索静态知识库、当前项目上传材料和本体上下文，再调用 AI provider。
 
 - `POST /api/llm/complete`
-  通用 AI 补全接口，支持 `prompt`、`itemId`、`stage`、`useCase` 和上下文。用于辅助意见生成时也会带上本体校验上下文。
+  通用 AI 补全接口，支持 `prompt`、`itemId`、`stage`、`useCase` 和上下文。用于辅助意见生成时也会带上本体校验上下文和当前项目材料引用。
 
 ## 持久化说明
 
@@ -292,6 +296,19 @@ ONTOLOGY_VALIDATION_PROVIDER=http-template
 - `ONTOLOGY_VALIDATION_API_KEY`
 - `ONTOLOGY_VALIDATION_NAMESPACE`
 
+### Project Evidence Provider
+
+当前内置：
+
+- `local-project-evidence`
+
+能力边界：
+
+- 将结构化申报材料归入 `proposal`、`finance`、`team`、`case` 等证据类别
+- 将 PDF / Word / Excel 附件保存为文件对象，并解析文本进入项目证据索引
+- 附件解析失败时保留 `parseStatus=failed` 和 `parseError`，不阻断项目评审
+- 当前只是本地开发适配器；生产数据库和对象存储实现可按同一契约替换
+
 详细 JSON 对接契约见：
 
 - `app/server/docs/integration-contracts.md`
@@ -332,7 +349,10 @@ ONTOLOGY_VALIDATION_PROVIDER=http-template
   本体验证 mock 引擎，用于本体团队接入前的接口联调与规则校验演示。
 
 - `app/server/docs/integration-contracts.md`
-  知识库、LLM、本体验证 provider 的外部服务对接契约。
+  知识库、LLM、本体验证和项目证据 provider 的外部服务对接契约。
+
+- `app/server/services/project-evidence/index.mjs`
+  项目证据 Provider，本地开发适配器负责结构化材料索引、附件对象保存和 PDF / Word / Excel 文本解析。
 
 - `SYSTEM_DESIGN.md`
   多项目评审系统重设计规划，说明项目提交、项目运行态和后续演进路线。

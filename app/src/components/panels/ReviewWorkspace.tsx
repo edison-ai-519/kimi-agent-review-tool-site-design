@@ -124,6 +124,7 @@ const ontologyValidationConfig = {
 } as const;
 
 const llmParticipationBadgeClassName = 'border-blue-500/30 bg-blue-500/10 text-blue-700';
+const aiScoreBadgeClassName = 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700';
 
 function OntologyValidationPanel({ validation }: { validation?: ReviewItemOntologyValidation }) {
   if (!validation) return null;
@@ -246,6 +247,34 @@ function LlmParticipationPanel({ participation }: { participation?: ReviewItem['
   );
 }
 
+function AiScorePanel({ aiScore }: { aiScore?: ReviewItem['aiScore'] }) {
+  if (!aiScore) return null;
+
+  return (
+    <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className={cn('text-xs', aiScoreBadgeClassName)}>
+          AI 评分 {aiScore.score}/{aiScore.maxScore}
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          置信度 {Math.round(aiScore.confidence * 100)}%
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          {aiScore.provider} / {aiScore.model}
+        </Badge>
+      </div>
+      <div className="mt-3 text-sm font-medium">AI 评分理由</div>
+      <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{aiScore.rationale}</div>
+      {(aiScore.relatedDocumentIds ?? []).length > 0 && (
+        <div className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+          引用材料 ID：{(aiScore.relatedDocumentIds ?? []).slice(0, 5).join('、')}
+        </div>
+      )}
+      <div className="mt-2 text-[11px] text-muted-foreground">生成时间：{formatTime(aiScore.createdAt)}</div>
+    </div>
+  );
+}
+
 function StageOverviewPanel({ currentStage, stageOverview }: { currentStage: ProjectInfo['stage']; stageOverview: ReviewStageOverview[] }) {
   const current = stageOverview.find((item) => item.stage === currentStage);
   if (!current && stageOverview.length === 0) return null;
@@ -325,6 +354,7 @@ function ReviewCard({
   const status = statusConfig[item.status];
   const ontologyValidation = item.ontologyValidation;
   const llmParticipation = item.llmParticipation;
+  const aiScore = item.aiScore;
   const [draftScore, setDraftScore] = useState(item.score?.toString() ?? '');
   const [draftComment, setDraftComment] = useState(item.comment ?? '');
   const [draftStatus, setDraftStatus] = useState<ReviewStatus>(item.status);
@@ -349,6 +379,11 @@ function ReviewCard({
                   LLM 已参与
                 </Badge>
               )}
+              {aiScore && (
+                <Badge variant="outline" className={cn('text-xs', aiScoreBadgeClassName)}>
+                  AI评分 {aiScore.score}/{aiScore.maxScore}
+                </Badge>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">{item.description}</div>
             {ontologyValidation && (
@@ -357,6 +392,11 @@ function ReviewCard({
             {llmParticipation && (
               <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 {compactText(llmParticipation.summary, 140)}
+              </div>
+            )}
+            {aiScore && (
+              <div className="mt-2 text-xs leading-relaxed text-cyan-700">
+                AI评分理由：{compactText(aiScore.rationale, 140)}
               </div>
             )}
           </div>
@@ -369,10 +409,11 @@ function ReviewCard({
             <div className="space-y-4 border-t border-border/50 pt-4">
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">{permissions.summary}</div>
               <OntologyValidationPanel validation={ontologyValidation} />
+              <AiScorePanel aiScore={aiScore} />
               <LlmParticipationPanel participation={llmParticipation} />
               <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
                 <div className="flex items-center gap-3">
-                  <div className="text-sm font-medium">评分</div>
+                  <div className="text-sm font-medium">专家评分</div>
                   <Input type="number" min={0} max={item.maxScore} value={draftScore} onChange={(event) => setDraftScore(event.target.value)} className="w-24 text-center" disabled={!permissions.canEditScore} />
                   <div className="text-sm text-muted-foreground">/ {item.maxScore}</div>
                 </div>

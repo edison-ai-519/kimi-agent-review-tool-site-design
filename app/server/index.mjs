@@ -21,6 +21,7 @@ import {
   createOntologyValidationClient,
   listOntologyValidationProviders
 } from './services/ontology-validation/index.mjs';
+import { createProjectEvidenceProvider, listProjectEvidenceProviders } from './services/project-evidence/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,9 @@ const knowledgeBaseClient = createKnowledgeBaseClient({
 const llmClient = createLlmClient();
 const ontologyValidationClient = createOntologyValidationClient({
   ontologyKnowledgeBase
+});
+const projectEvidenceProvider = createProjectEvidenceProvider({
+  dataDir
 });
 const reviewStageSeeds = createStageSeeds(appStateSeed);
 const stateStore = createStateStore({
@@ -196,6 +200,30 @@ function parseOptionalString(value, maxLength = 600) {
   return normalized;
 }
 
+function parseOptionalRawString(value, label) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new HttpError(400, `${label} must be a string.`);
+  }
+
+  return value.trim();
+}
+
+function parseOptionalAttachmentParseStatus(value, label) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (!['pending', 'parsed', 'failed'].includes(value)) {
+    throw new HttpError(400, `${label} must be pending / parsed / failed.`);
+  }
+
+  return value;
+}
+
 function parseOptionalPositiveInteger(value, label) {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -238,7 +266,16 @@ function parseProjectAttachments(value) {
       size,
       type: parseOptionalString(attachment.type, 120),
       lastModified: parseOptionalPositiveInteger(attachment.lastModified, `第 ${index + 1} 个附件更新时间`),
-      uploadedAt: parseOptionalString(attachment.uploadedAt, 80) ?? new Date().toISOString()
+      uploadedAt: parseOptionalString(attachment.uploadedAt, 80) ?? new Date().toISOString(),
+      contentBase64: parseOptionalRawString(attachment.contentBase64, `attachment ${index + 1} contentBase64`),
+      materialType: parseOptionalString(attachment.materialType, 80),
+      version: parseOptionalPositiveInteger(attachment.version, `attachment ${index + 1} version`),
+      storageKey: parseOptionalString(attachment.storageKey, 240),
+      parseStatus: parseOptionalAttachmentParseStatus(attachment.parseStatus, `attachment ${index + 1} parseStatus`),
+      parseError: parseOptionalString(attachment.parseError, 600),
+      parsedAt: parseOptionalString(attachment.parsedAt, 80),
+      evidenceDocumentId: parseOptionalString(attachment.evidenceDocumentId, 240),
+      extractedTextPreview: parseOptionalString(attachment.extractedTextPreview, 600)
     };
   });
 }
@@ -262,11 +299,11 @@ function parseProjectMaterials(value) {
   };
 }
 
-function parseProjectSubmission(body) {
+async function parseProjectSubmission(body) {
   const submittedAt = new Date().toISOString();
   const materials = parseProjectMaterials(body.materials);
 
-  return {
+  const project = {
     id: `project-${randomUUID()}`,
     name: parseRequiredNonEmptyString(body.name, '项目名称', 120),
     applicant: parseRequiredNonEmptyString(body.applicant, '申报单位', 120),
@@ -282,6 +319,8 @@ function parseProjectSubmission(body) {
     submittedAt,
     stage: 'proposal'
   };
+
+  return projectEvidenceProvider.prepareProject(project);
 }
 
 function parseLimit(value, fallback = 3) {
@@ -447,14 +486,15 @@ function buildOntologyContext(stage, { prompt = '', item = null, ontologyPathLab
   };
 }
 
-async function buildReviewItemOntologyValidation(item, stage) {
+async function buildReviewItemOntologyValidation(item, stage, projectId = getCurrentProjectId()) {
   const ontologyPathLabels = getOntologyPathLabels(item.id);
   try {
     const knowledgeSearch = await resolveKnowledgeSearch({
       query: item.title,
       itemId: item.id,
       limit: 4,
-      ontologyPathLabels
+      ontologyPathLabels,
+      projectId
     });
 
     return ontologyValidationClient.validateReviewItem({
@@ -552,13 +592,56 @@ async function buildReviewItemLlmParticipation({
   }
 }
 
-async function buildReviewItemIntelligence(item, stage) {
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function buildReviewItemAiScore({ item, ontologyValidation, llmParticipation }) {
+  const relatedDocuments = Array.isArray(llmParticipation.relatedDocuments) ? llmParticipation.relatedDocuments : [];
+  const projectDocumentCount = relatedDocuments.filter((document) => document.tags?.includes('project-evidence')).length;
+  const missingCategoryCount = ontologyValidation.missingDocumentCategories?.length ?? 0;
+  const findingPenalty = ontologyValidation.findings?.reduce((total, finding) => {
+    if (finding.severity === 'fail') return total + 0.08;
+    if (finding.severity === 'warn') return total + 0.04;
+    return total;
+  }, 0) ?? 0;
+  const statusBaseRatio = {
+    pass: 0.84,
+    warn: 0.68,
+    fail: 0.48
+  }[ontologyValidation.status] ?? 0.62;
+  const evidenceBonus = Math.min(0.08, relatedDocuments.length * 0.015 + projectDocumentCount * 0.02);
+  const missingPenalty = Math.min(0.16, missingCategoryCount * 0.04);
+  const ratio = clamp(statusBaseRatio + evidenceBonus - missingPenalty - findingPenalty, 0.25, 0.95);
+  const confidence = clamp(0.56 + relatedDocuments.length * 0.04 + projectDocumentCount * 0.05 - missingCategoryCount * 0.05, 0.42, 0.9);
+  const score = Math.round(item.maxScore * ratio);
+  const rationaleParts = [
+    `本体校验状态：${ontologyValidation.status}`,
+    `命中参考资料：${relatedDocuments.length} 份`,
+    projectDocumentCount > 0 ? `其中项目上传/结构化材料 ${projectDocumentCount} 份` : '尚未命中项目上传材料',
+    missingCategoryCount > 0 ? `仍缺少 ${ontologyValidation.missingDocumentCategories.join('、')} 类证据` : '关键材料类型覆盖较完整'
+  ];
+
+  return {
+    score: clamp(score, 0, item.maxScore),
+    maxScore: item.maxScore,
+    confidence,
+    rationale: rationaleParts.join('；'),
+    provider: llmParticipation.provider,
+    model: llmParticipation.model,
+    createdAt: llmParticipation.createdAt,
+    relatedDocumentIds: relatedDocuments.map((document) => document.id)
+  };
+}
+
+async function buildReviewItemIntelligence(item, stage, projectId = getCurrentProjectId()) {
   const ontologyPathLabels = getOntologyPathLabels(item.id);
   const knowledgeSearch = await resolveKnowledgeSearch({
-    query: [item.title, item.description, item.comment ?? ''].filter(Boolean).join(' '),
+    query: [item.title, item.description].filter(Boolean).join(' '),
     itemId: item.id,
     limit: 4,
-    ontologyPathLabels
+    ontologyPathLabels,
+    projectId
   });
 
   const ontologyValidation = await ontologyValidationClient.validateReviewItem({
@@ -576,37 +659,49 @@ async function buildReviewItemIntelligence(item, stage) {
     ontologyPathLabels
   });
 
+  const aiScore = buildReviewItemAiScore({
+    item,
+    ontologyValidation,
+    llmParticipation
+  });
+
   return {
     ontologyValidation,
     llmParticipation,
+    aiScore,
     knowledgeDocuments: knowledgeSearch.documents,
     ontologyPathLabels
   };
 }
 
-async function enrichReviewItem(item, stage) {
+async function enrichReviewItem(item, stage, projectId = getCurrentProjectId()) {
   try {
-    const intelligence = await buildReviewItemIntelligence(item, stage);
+    const intelligence = await buildReviewItemIntelligence(item, stage, projectId);
     return {
       ...clone(item),
       ontologyValidation: intelligence.ontologyValidation,
-      llmParticipation: intelligence.llmParticipation
+      llmParticipation: intelligence.llmParticipation,
+      aiScore: intelligence.aiScore
     };
   } catch (error) {
+    const ontologyValidation = await buildReviewItemOntologyValidation(item, stage, projectId);
+    const llmParticipation = {
+      provider: llmClient.name,
+      model: process.env.LLM_MODEL ?? 'unknown',
+      useCase: 'review-evaluation',
+      createdAt: new Date().toISOString(),
+      summary:
+        error instanceof Error
+          ? `LLM 参与评审建议生成失败：${error.message}`
+          : 'LLM 参与评审建议生成失败，请稍后重试。',
+      relatedDocuments: []
+    };
+
     return {
       ...clone(item),
-      ontologyValidation: await buildReviewItemOntologyValidation(item, stage),
-      llmParticipation: {
-        provider: llmClient.name,
-        model: process.env.LLM_MODEL ?? 'unknown',
-        useCase: 'review-evaluation',
-        createdAt: new Date().toISOString(),
-        summary:
-          error instanceof Error
-            ? `LLM 参与评审建议生成失败：${error.message}`
-            : 'LLM 参与评审建议生成失败，请稍后重试。',
-        relatedDocuments: []
-      }
+      ontologyValidation,
+      llmParticipation,
+      aiScore: buildReviewItemAiScore({ item, ontologyValidation, llmParticipation })
     };
   }
 }
@@ -614,7 +709,7 @@ async function enrichReviewItem(item, stage) {
 async function buildAppStatePayload(stage = getCurrentStage(), projectId = getCurrentProjectId()) {
   const stageSeed = reviewStageSeeds[stage];
   const project = stateStore.getProject(projectId) ?? stageSeed.project;
-  const reviewItems = await Promise.all(getReviewItems(stage, projectId).map((item) => enrichReviewItem(item, stage)));
+  const reviewItems = await Promise.all(getReviewItems(stage, projectId).map((item) => enrichReviewItem(item, stage, projectId)));
   const fallbackOntology = clone(appStateSeed.ontology);
   let ontology = fallbackOntology;
 
@@ -837,14 +932,40 @@ function getRouteMatch(pathname) {
   return null;
 }
 
-async function resolveKnowledgeSearch({ query = '', itemId, limit = 3, ontologyPathLabels = [] }) {
-  const reviewItem = itemId ? getReviewItemStateOrThrow(itemId).item : null;
-  return knowledgeBaseClient.search({
+async function resolveKnowledgeSearch({ query = '', itemId, limit = 3, ontologyPathLabels = [], projectId = getCurrentProjectId() }) {
+  const reviewItemState = itemId ? getReviewItemStateOrThrow(itemId) : null;
+  const reviewItem = reviewItemState?.item ?? null;
+  const resolvedProjectId = reviewItemState?.projectId ?? projectId;
+  const project = stateStore.getProject(resolvedProjectId);
+  const baseSearch = await knowledgeBaseClient.search({
     query,
     reviewItem,
     ontologyPathLabels,
     limit
   });
+  const projectEvidenceSearch = projectEvidenceProvider.searchProjectEvidence({
+    project,
+    query,
+    reviewItem,
+    ontologyPathLabels,
+    limit
+  });
+  const documentsById = new Map();
+
+  for (const document of [...projectEvidenceSearch.documents, ...baseSearch.documents]) {
+    if (!documentsById.has(document.id)) {
+      documentsById.set(document.id, document);
+    }
+  }
+
+  const documents = [...documentsById.values()].slice(0, Math.min(10, Math.max(limit, limit + (projectEvidenceSearch.documents.length > 0 ? 2 : 0))));
+
+  return {
+    query: baseSearch.query || projectEvidenceSearch.query || query,
+    source: `${baseSearch.source}+${projectEvidenceSearch.source}`,
+    total: documents.length,
+    documents
+  };
 }
 
 async function buildReasoningPayload(itemId) {
@@ -858,7 +979,7 @@ async function buildReasoningPayload(itemId) {
     return null;
   }
 
-  const intelligence = await buildReviewItemIntelligence(reviewItemState.item, reviewItemState.stage);
+  const intelligence = await buildReviewItemIntelligence(reviewItemState.item, reviewItemState.stage, reviewItemState.projectId);
   const knowledgeDocuments = intelligence.knowledgeDocuments.map((document, index) =>
     knowledgeBaseClient.toDocumentFragment(document, {
       terms: [reviewItemState.item.title, reviewItemState.item.description, seed.ontologyPathLabels],
@@ -879,6 +1000,7 @@ async function buildReasoningPayload(itemId) {
 async function buildAiResponse({ prompt, itemId, stage, useCase = 'general', context = [] }) {
   const reviewItemState = itemId ? getReviewItemStateOrThrow(itemId) : null;
   const resolvedStage = reviewItemState?.stage ?? stage ?? getCurrentStage();
+  const projectId = reviewItemState?.projectId ?? getCurrentProjectId();
   const ontologyPathLabels = itemId
     ? reasoningSeedMap[itemId]?.ontologyPathLabels ?? getStageItemContext(itemId)?.ontologyPathLabels ?? []
     : [];
@@ -891,7 +1013,8 @@ async function buildAiResponse({ prompt, itemId, stage, useCase = 'general', con
     query: prompt,
     itemId,
     limit: 3,
-    ontologyPathLabels
+    ontologyPathLabels,
+    projectId
   });
   const ontologyValidation = reviewItemState
     ? await ontologyValidationClient.validateReviewItem({
@@ -1008,9 +1131,11 @@ const server = http.createServer(async (req, res) => {
           knowledgeBaseProvider: knowledgeBaseClient.name,
           llmProvider: llmClient.name,
           ontologyValidationProvider: ontologyValidationClient.name,
+          projectEvidenceProvider: projectEvidenceProvider.name,
           availableKnowledgeBaseProviders: listKnowledgeBaseProviders(),
           availableLlmProviders: listLlmProviders(),
-          availableOntologyValidationProviders: listOntologyValidationProviders()
+          availableOntologyValidationProviders: listOntologyValidationProviders(),
+          availableProjectEvidenceProviders: listProjectEvidenceProviders()
         }
       });
       return;
@@ -1049,7 +1174,7 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'POST' && pathname === '/api/projects') {
       const body = await readRequestBody(req);
-      const project = parseProjectSubmission(body);
+      const project = await parseProjectSubmission(body);
       const projectStageSeeds = createStageSeeds(appStateSeed, {
         project,
         mode: 'submitted',
@@ -1258,7 +1383,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const enrichedItem = await enrichReviewItem(updatedItem, reviewItemState.stage);
+      const enrichedItem = await enrichReviewItem(updatedItem, reviewItemState.stage, reviewItemState.projectId);
 
       sendJson(res, 200, {
         item: enrichedItem,

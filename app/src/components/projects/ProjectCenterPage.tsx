@@ -24,6 +24,7 @@ type ProjectMaterialTextField =
 
 const maxProjectAttachments = 20;
 const maxProjectAttachmentBytes = 100 * 1024 * 1024;
+const supportedProjectAttachmentExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
 
 const emptyMaterials: ProjectSubmissionMaterials = {
   summary: '',
@@ -141,6 +142,40 @@ function formatFileSize(size: number) {
   return `${(size / 1024 ** unitIndex).toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+function getFileExtension(fileName: string) {
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : '';
+}
+
+function isSupportedProjectAttachment(file: File) {
+  return supportedProjectAttachmentExtensions.includes(getFileExtension(file.name));
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      resolve(result.includes(',') ? result.split(',').pop() ?? '' : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('读取附件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getAttachmentParseStatusLabel(status?: ProjectSubmissionAttachment['parseStatus']) {
+  switch (status) {
+    case 'parsed':
+      return '已解析';
+    case 'failed':
+      return '解析失败';
+    case 'pending':
+      return '待解析';
+    default:
+      return null;
+  }
+}
+
 function getAttachmentKey(attachment: ProjectSubmissionAttachment) {
   return [attachment.name, attachment.size, attachment.lastModified ?? ''].join(':');
 }
@@ -173,6 +208,7 @@ export function ProjectCenterPage({
   const [draft, setDraft] = useState<ProjectSubmissionInput>(() => cloneDraft());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectingProjectId, setSelectingProjectId] = useState<string | null>(null);
+  const [isReadingAttachments, setIsReadingAttachments] = useState(false);
   const projectOptions = projects.length > 0 ? projects : [currentProject];
   const submittedCount = projectOptions.filter((project) => project.source === 'submitted').length;
   const requiredMaterialCompleted = requiredMaterialFields.filter((field) => draft.materials[field.id]?.trim()).length;
@@ -182,8 +218,9 @@ export function ProjectCenterPage({
     () =>
       Boolean(draft.name.trim()) &&
       Boolean(draft.applicant.trim()) &&
-      requiredMaterialCompleted === requiredMaterialFields.length,
-    [draft, requiredMaterialCompleted]
+      requiredMaterialCompleted === requiredMaterialFields.length &&
+      !isReadingAttachments,
+    [draft, requiredMaterialCompleted, isReadingAttachments]
   );
 
   const updateDraft = (patch: Partial<ProjectSubmissionInput>) => {
@@ -213,40 +250,67 @@ export function ProjectCenterPage({
     }));
   };
 
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
+  const handleAttachmentChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
     if (files.length === 0) {
       return;
     }
 
     setErrorMessage(null);
+    setIsReadingAttachments(true);
 
-    const acceptedFiles = files.filter((file) => file.size <= maxProjectAttachmentBytes);
-    if (acceptedFiles.length !== files.length) {
-      setErrorMessage('单个附件不能超过 100MB，超出大小的文件未加入清单。');
+    try {
+      const sizeAcceptedFiles = files.filter((file) => file.size <= maxProjectAttachmentBytes);
+      const acceptedFiles = sizeAcceptedFiles.filter(isSupportedProjectAttachment);
+      const messages: string[] = [];
+
+      if (sizeAcceptedFiles.length !== files.length) {
+        messages.push('单个附件不能超过 100MB，超出大小的文件未加入清单。');
+      }
+
+      if (acceptedFiles.length !== sizeAcceptedFiles.length) {
+        messages.push('第一版仅解析 PDF / Word / Excel，其他格式未加入清单。');
+      }
+
+      const attachmentsByKey = new Map(
+        (draft.materials.attachments ?? []).map((attachment) => [getAttachmentKey(attachment), attachment])
+      );
+
+      const fileAttachments = await Promise.all(
+        acceptedFiles.map(async (file) => {
+          const attachment: ProjectSubmissionAttachment = {
+            name: file.name,
+            size: file.size,
+            type: file.type || undefined,
+            lastModified: file.lastModified,
+            contentBase64: await readFileAsBase64(file),
+            parseStatus: 'pending'
+          };
+          return attachment;
+        })
+      );
+
+      fileAttachments.forEach((attachment) => {
+        attachmentsByKey.set(getAttachmentKey(attachment), attachment);
+      });
+
+      const nextAttachments = Array.from(attachmentsByKey.values());
+      if (nextAttachments.length > maxProjectAttachments) {
+        messages.push(`附件最多选择 ${maxProjectAttachments} 个，超出的文件未加入清单。`);
+      }
+
+      if (messages.length > 0) {
+        setErrorMessage(messages.join(' '));
+      }
+
+      updateAttachments(nextAttachments.slice(0, maxProjectAttachments));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '读取附件失败，请重新选择文件。');
+    } finally {
+      setIsReadingAttachments(false);
+      input.value = '';
     }
-
-    const attachmentsByKey = new Map(
-      (draft.materials.attachments ?? []).map((attachment) => [getAttachmentKey(attachment), attachment])
-    );
-
-    acceptedFiles.forEach((file) => {
-      const attachment: ProjectSubmissionAttachment = {
-        name: file.name,
-        size: file.size,
-        type: file.type || undefined,
-        lastModified: file.lastModified
-      };
-      attachmentsByKey.set(getAttachmentKey(attachment), attachment);
-    });
-
-    const nextAttachments = Array.from(attachmentsByKey.values());
-    if (nextAttachments.length > maxProjectAttachments) {
-      setErrorMessage(`附件最多选择 ${maxProjectAttachments} 个，超出的文件未加入清单。`);
-    }
-
-    updateAttachments(nextAttachments.slice(0, maxProjectAttachments));
-    event.target.value = '';
   };
 
   const handleRemoveAttachment = (attachment: ProjectSubmissionAttachment) => {
@@ -337,6 +401,10 @@ export function ProjectCenterPage({
                 {projectOptions.map((project) => {
                   const isCurrent = project.id === currentProject.id;
                   const projectAttachmentCount = project.materials?.attachments?.length ?? 0;
+                  const projectParsedAttachmentCount =
+                    project.materials?.attachments?.filter((attachment) => attachment.parseStatus === 'parsed').length ?? 0;
+                  const projectFailedAttachmentCount =
+                    project.materials?.attachments?.filter((attachment) => attachment.parseStatus === 'failed').length ?? 0;
                   return (
                     <button
                       key={project.id}
@@ -369,6 +437,8 @@ export function ProjectCenterPage({
                         <div>周期：{project.duration}</div>
                         <div>提交：{formatDate(project.submittedAt)}</div>
                         <div>附件：{projectAttachmentCount} 个</div>
+                        <div>已解析：{projectParsedAttachmentCount} 个</div>
+                        {projectFailedAttachmentCount > 0 && <div>解析失败：{projectFailedAttachmentCount} 个</div>}
                         <div>{selectingProjectId === project.id ? '正在进入...' : '点击进入评审'}</div>
                       </div>
                       {project.summary && <div className="mt-3 text-sm leading-relaxed text-muted-foreground">{project.summary}</div>}
@@ -480,16 +550,20 @@ export function ProjectCenterPage({
                       <p className="mt-1 text-xs text-muted-foreground">
                         最多 {maxProjectAttachments} 个文件，单个文件不超过 100MB。
                       </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        当前版本解析 PDF / Word / Excel；图片、PPT 和压缩包暂不进入解析链路。
+                      </p>
                     </div>
                     <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
                       <UploadCloud className="h-4 w-4" />
-                      选择文件
+                      {isReadingAttachments ? '读取附件中...' : '选择文件'}
                       <input
                         type="file"
                         multiple
                         className="sr-only"
                         onChange={handleAttachmentChange}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.rar"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx"
+                        disabled={isReadingAttachments}
                       />
                     </label>
                   </div>
@@ -505,6 +579,11 @@ export function ProjectCenterPage({
                             <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
                             <span className="truncate font-medium">{attachment.name}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">{formatFileSize(attachment.size)}</span>
+                            {getAttachmentParseStatusLabel(attachment.parseStatus) && (
+                              <Badge variant={attachment.parseStatus === 'failed' ? 'destructive' : 'secondary'} className="shrink-0 text-[10px]">
+                                {getAttachmentParseStatusLabel(attachment.parseStatus)}
+                              </Badge>
+                            )}
                           </div>
                           <button
                             type="button"
@@ -514,6 +593,9 @@ export function ProjectCenterPage({
                           >
                             <X className="h-4 w-4" />
                           </button>
+                          {attachment.parseError && (
+                            <div className="basis-full text-xs leading-relaxed text-amber-700">{attachment.parseError}</div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -526,7 +608,7 @@ export function ProjectCenterPage({
                   </div>
                   <Button type="submit" disabled={!canSubmit || isSubmitting} className="gap-2">
                     <Plus className="h-4 w-4" />
-                    {isSubmitting ? '提交中...' : '提交项目'}
+                    {isReadingAttachments ? '读取附件中...' : isSubmitting ? '提交中...' : '提交项目'}
                   </Button>
                 </div>
               </form>

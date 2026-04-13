@@ -7,7 +7,10 @@ function summarizeKnowledgeDocuments(knowledgeDocuments) {
 
   return knowledgeDocuments
     .slice(0, 3)
-    .map((document, index) => `${index + 1}. ${document.title}：${document.summary}`)
+    .map((document, index) => {
+      const sourceLabel = document.tags?.includes('project-evidence') ? '项目材料' : '知识库';
+      return `${index + 1}. [${sourceLabel}] ${document.title}：${document.summary}`;
+    })
     .join('\n');
 }
 

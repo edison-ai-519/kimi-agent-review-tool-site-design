@@ -33,6 +33,17 @@ export interface RecentConcept {
   trend: 'up' | 'down' | 'stable';
 }
 
+export interface ReviewItemAiScore {
+  score: number;
+  maxScore: number;
+  confidence: number;
+  rationale: string;
+  provider: string;
+  model: string;
+  createdAt: string;
+  relatedDocumentIds: string[];
+}
+
 // Review item
 export interface ReviewItem {
   id: string;
@@ -47,6 +58,7 @@ export interface ReviewItem {
   reasoning?: ReasoningChain;
   ontologyValidation?: ReviewItemOntologyValidation;
   llmParticipation?: ReviewItemLlmParticipation;
+  aiScore?: ReviewItemAiScore;
 }
 
 // Reasoning chain
@@ -119,6 +131,15 @@ export interface ProjectSubmissionAttachment {
   type?: string;
   lastModified?: number;
   uploadedAt?: string;
+  contentBase64?: string;
+  materialType?: string;
+  version?: number;
+  storageKey?: string;
+  parseStatus?: 'pending' | 'parsed' | 'failed';
+  parseError?: string;
+  parsedAt?: string;
+  evidenceDocumentId?: string;
+  extractedTextPreview?: string;
 }
 
 export interface ProjectSubmissionMaterials {
@@ -134,6 +155,8 @@ export interface ProjectSubmissionMaterials {
   ethicsAndCompliance?: string;
   attachmentsDescription?: string;
   attachments?: ProjectSubmissionAttachment[];
+  evidenceDocuments?: KnowledgeDocument[];
+  evidenceIndexUpdatedAt?: string;
 }
 
 export interface ProjectSubmissionInput {
